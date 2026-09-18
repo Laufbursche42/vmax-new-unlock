@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v1';
+const BUILD = 'v2';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -440,7 +440,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initLangSwitch();
   applyLang();
-  const bv = $('build-ver'); if (bv) bv.textContent = BUILD;
+  const bv = $('build-ver'); if (bv) bv.textContent = 'build ' + BUILD;
   logDiagnosticHeader();
 
   $('btn-conn').addEventListener('click', () => { if ($('btn-conn').dataset.act === 'disconnect') disconnectBle(); else pickAndConnect(); });
