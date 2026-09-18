@@ -61,6 +61,38 @@ if [ -n "$dash_blocked" ]; then
 fi
 
 # =================================================================
+# PHASE 0.5 - stamp the build version (automatic on every commit)
+# =================================================================
+# The build number = the count this commit will have (existing commits + 1). It is written into
+# app.js (const BUILD, shown in the footer and the diagnostic) and into every ?v= cache-buster in
+# index.html, so the visible version and the browser cache always move together - no manual bump,
+# and it can never silently lag behind the code again. A file is stamped only when it has no
+# unstaged changes, so work in progress is never pulled into the commit.
+if command -v perl >/dev/null 2>&1; then
+  _bn=$(git rev-list --count HEAD 2>/dev/null || echo 0); _bn=$((_bn + 1))
+  if [ -f "$REPO_ROOT/app.js" ] && grep -q "const BUILD = '" "$REPO_ROOT/app.js"; then
+    if git diff --quiet -- app.js 2>/dev/null; then
+      perl -CSD -i -pe "s/const BUILD = '[^']*';/const BUILD = '$_bn';/" "$REPO_ROOT/app.js"
+      if node --check "$REPO_ROOT/app.js" 2>"$TMPD/stamperr"; then
+        git add -- app.js; echo "  stamped build -> $_bn (app.js)"
+      else
+        echo "BLOCK: build stamp broke app.js:"; sed 's/^/        /' "$TMPD/stamperr"; RC=1
+      fi
+    else
+      echo "  NOTE: app.js has unstaged changes - build not stamped this commit"
+    fi
+  fi
+  if [ -f "$REPO_ROOT/index.html" ] && grep -q '?v=' "$REPO_ROOT/index.html"; then
+    if git diff --quiet -- index.html 2>/dev/null; then
+      perl -CSD -i -pe "s/\\?v=[^\"'&]*/?v=$_bn/g" "$REPO_ROOT/index.html"
+      git add -- index.html; echo "  stamped cache-buster -> ?v=$_bn (index.html)"
+    else
+      echo "  NOTE: index.html has unstaged changes - cache-buster not stamped this commit"
+    fi
+  fi
+fi
+
+# =================================================================
 # PHASE A - syntax checks
 # =================================================================
 # Node snippet: extract every inline <script> WITHOUT src= from an HTML file.
