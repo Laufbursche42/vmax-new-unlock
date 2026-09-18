@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v10';
+const BUILD = 'v11';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -273,7 +273,9 @@ async function readAll() {
     try {
       const v = await c.readValue();
       const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-      log('RD ' + su + '  ' + bytesToHex(bytes), 'log-rx');
+      const hex = bytesToHex(bytes);
+      log('RD ' + su + '  ' + hex, 'log-rx');
+      lastFrame[su] = hex;     // remember it so the near-instant identical notification is not logged twice
       const dec = DECODERS[su];
       if (dec) { try { dec(bytes); } catch (e) { log('  decode ' + su + ' failed: ' + e, 'log-err'); } }
     } catch (e) { log('  read ' + su + ' failed: ' + e, 'log-err'); }
