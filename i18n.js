@@ -28,6 +28,9 @@ window.I18N = {
     btnConnect: "Verbinden",
     btnDisconnect: "Trennen",
     controlsHint: "Web Bluetooth geht auf dem iPhone nur über die App Bluefy, auf Android oder Desktop über Chrome oder Edge. Beim ersten Verbinden alle gefundenen Dienste und Merkmale zulassen.",
+    noBleAlert: "Web Bluetooth ist in diesem Browser nicht verfügbar. Auf dem iPhone diese Seite in der App Bluefy öffnen (kostenlos im App Store), nicht in Safari oder Chrome. Auf Android oder Desktop Chrome oder Edge nutzen.",
+    connectErr: "Verbindung fehlgeschlagen: ",
+    connectNoDevice: "Kein Gerät ausgewählt. Tippe auf Verbinden und wähle deinen VMAX aus der Liste. Bluetooth muss an sein und der Scooter eingeschaltet und in Reichweite. Prüfe in den iPhone-Einstellungen, dass Bluefy die Bluetooth-Freigabe hat.",
 
     liveTitle: "Live-Werte vom Scooter",
     tileSpeed: "Geschwindigkeit",
@@ -106,6 +109,9 @@ window.I18N = {
     btnConnect: "Connect",
     btnDisconnect: "Disconnect",
     controlsHint: "Web Bluetooth works on the iPhone only through the Bluefy app, on Android or desktop through Chrome or Edge. On first connect allow all discovered services and characteristics.",
+    noBleAlert: "Web Bluetooth is not available in this browser. On iPhone open this page in the Bluefy app (free on the App Store), not Safari or Chrome. On Android or desktop use Chrome or Edge.",
+    connectErr: "Connection failed: ",
+    connectNoDevice: "No device selected. Tap Connect and pick your VMAX from the list. Bluetooth must be on and the scooter switched on and in range. In iPhone Settings check that Bluefy has the Bluetooth permission.",
 
     liveTitle: "Live values from the scooter",
     tileSpeed: "Speed",

@@ -103,14 +103,13 @@ const SERVICE = u('1500');            // GPST service of the newer VMAX line
 const TUNE_NOTIFY = u('160c');        // MotorTuning report (ReadValueForCharacteristic)
 const TUNE_WRITE = u('160d');         // MotorTuning write (WriteMotorTuning)
 const TIMESYNC_WRITE = u('1607');     // handshake: WriteTimeSync sends 6 time bytes here
-// To access a service it must be in optionalServices. List the whole DA1A family roots plus standards.
-const OPTIONAL_SERVICES = (() => {
-  const list = [];
-  for (let i = 0x1500; i <= 0x1520; i++) list.push(u(i.toString(16)));
-  ['1600', '1800', '1a00', '1c00', '1e00', '1f00'].forEach(s => list.push(u(s)));
-  list.push(0x180a, 0x180f, 0x1800, 0x1801); // device info, battery, generic access/attribute
-  return list;
-})();
+// To reach a service it must be in optionalServices. iOS WebKit (Bluefy) is stricter than desktop
+// Chrome: it rejects requestDevice outright when the list holds raw numeric UUIDs or standard services
+// such as 0x1800/0x1801, and the picker never opens. So we pass only the canonical 128-bit UUID
+// strings of the DA1A service roots we actually read - the same all-128-bit shape the vmax-unlock tool
+// uses, which connects fine in that same Bluefy. Characteristics live under these roots; listing the
+// roots is enough to enumerate every characteristic after connect.
+const OPTIONAL_SERVICES = ['1500', '1600', '1800', '1a00', '1c00', '1e00', '1f00'].map(u);
 
 // MotorTuningValueType (ordinal) from the SDK
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
@@ -196,7 +195,7 @@ let connected = false, connecting = false;
 function shortUuid(uuid) { const m = /^0000([0-9a-f]{4})-/.exec(uuid); if (m) return m[1]; const n = /^da1a([0-9a-f]{4})-/.exec(uuid); return n ? n[1] : uuid; }
 
 async function pickAndConnect() {
-  if (!navigator.bluetooth) { log('Web Bluetooth not available in this browser', 'log-err'); return; }
+  if (!navigator.bluetooth) { log('Web Bluetooth not available in this browser', 'log-err'); try { alert(t('noBleAlert')); } catch (e) {} return; }
   if (connecting || connected) return;
   connecting = true; setStatus('connecting'); updateConnButton();
   try {
@@ -214,7 +213,15 @@ async function pickAndConnect() {
     if (!tuneWriteChar) log('WARNING: write characteristic DA1A160D not found - this may not be a newer VMAX model', 'log-err');
   } catch (e) {
     connecting = false; setStatus('disconnected'); updateConnButton();
-    log('connect failed: ' + (e && e.message ? e.message : e), 'log-err');
+    const msg = (e && e.message) ? e.message : String(e);
+    const name = (e && e.name) ? e.name : '';
+    log('connect failed: ' + (name ? name + ': ' : '') + msg, 'log-err');
+    // Make the failure visible: on iOS/Bluefy the picker error is otherwise silent.
+    if (/cancel/i.test(msg)) return;             // genuine user cancel: stay quiet
+    let text;
+    if (name === 'NotFoundError') text = t('connectNoDevice');   // no device / bluetooth off / permission
+    else text = t('connectErr') + (name ? name + ': ' : '') + msg;
+    try { alert(text); } catch (_) {}
   }
 }
 
