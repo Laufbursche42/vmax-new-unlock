@@ -31,6 +31,7 @@ window.I18N = {
     noBleAlert: "Web Bluetooth ist in diesem Browser nicht verfügbar. Auf dem iPhone diese Seite in der App Bluefy öffnen (kostenlos im App Store), nicht in Safari oder Chrome. Auf Android oder Desktop Chrome oder Edge nutzen.",
     connectErr: "Verbindung fehlgeschlagen: ",
     connectNoDevice: "Kein Gerät ausgewählt. Tippe auf Verbinden und wähle deinen VMAX aus der Liste. Bluetooth muss an sein und der Scooter eingeschaltet und in Reichweite. Prüfe in den iPhone-Einstellungen, dass Bluefy die Bluetooth-Freigabe hat.",
+    tuneUnavail: "Dieser Scooter bietet das MotorTuning-Schreibmerkmal (DA1A160D) nicht an. Live-Werte und Auslesen gehen, aber die Drossel lässt sich hier nicht schreiben.",
 
     liveTitle: "Live-Werte vom Scooter",
     tileSpeed: "Geschwindigkeit",
@@ -112,6 +113,7 @@ window.I18N = {
     noBleAlert: "Web Bluetooth is not available in this browser. On iPhone open this page in the Bluefy app (free on the App Store), not Safari or Chrome. On Android or desktop use Chrome or Edge.",
     connectErr: "Connection failed: ",
     connectNoDevice: "No device selected. Tap Connect and pick your VMAX from the list. Bluetooth must be on and the scooter switched on and in range. In iPhone Settings check that Bluefy has the Bluetooth permission.",
+    tuneUnavail: "This scooter does not expose the MotorTuning write characteristic (DA1A160D). Live values and reading work, but the limiter cannot be written here.",
 
     liveTitle: "Live values from the scooter",
     tileSpeed: "Speed",

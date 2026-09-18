@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v8';
+const BUILD = 'v9';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -210,8 +210,8 @@ async function pickAndConnect() {
     await enumerateGatt();
     await writeTimeSync();     // handshake, like the app does after connect
     connected = true; connecting = false; setStatus('connected');
-    updateConnButton(); setDrosselEnabled(true);
-    if (!tuneWriteChar) log('WARNING: write characteristic DA1A160D not found - this may not be a newer VMAX model', 'log-err');
+    updateConnButton(); setDrosselEnabled(true); updateTuneNote();
+    if (!tuneWriteChar) log('MotorTuning write (DA1A160D) not present on this scooter - reading and live values work, but the limiter cannot be written here', 'log-err');
   } catch (e) {
     connecting = false; setStatus('disconnected'); updateConnButton();
     const msg = (e && e.message) ? e.message : String(e);
@@ -228,7 +228,7 @@ async function pickAndConnect() {
 
 async function enumerateGatt() {
   const out = [];
-  notifyChars.length = 0; tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null;
+  notifyChars.length = 0; tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; lastFrame = {};
   let services = [];
   try { services = await server.getPrimaryServices(); } catch (e) { log('getPrimaryServices failed: ' + e, 'log-err'); }
   for (const svc of services) {
@@ -259,12 +259,16 @@ async function writeTimeSync() {
   await writeRaw(timeSyncChar, timeSyncFrame(), '1607 TimeSync (handshake)');
 }
 
+let lastFrame = {};
 function onNotify(ev) {
   const dv = ev.target.value;
   const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
-  const su = shortUuid(ev.target.uuid);
-  log('RX ' + su + '  ' + bytesToHex(bytes), 'log-rx');
-  const dec = DECODERS[String(su).toLowerCase()];
+  const su = String(shortUuid(ev.target.uuid)).toLowerCase();
+  const hex = bytesToHex(bytes);
+  if (lastFrame[su] === hex) return;    // same frame as last time: skip so the log stays readable
+  lastFrame[su] = hex;
+  log('RX ' + su + '  ' + hex, 'log-rx');
+  const dec = DECODERS[su];
   if (dec) { try { dec(bytes); } catch (e) { log('  decode ' + su + ' failed: ' + e, 'log-err'); } }
 }
 
@@ -316,7 +320,8 @@ async function writeRaw(char, bytes, label) {
 }
 
 async function writeDrossel(open) {
-  if (!connected || !tuneWriteChar) { log('not connected or 160D missing', 'log-err'); return; }
+  if (!connected) { log('not connected', 'log-err'); return; }
+  if (!tuneWriteChar) { log('MotorTuning write (DA1A160D) not present on this scooter', 'log-err'); try { alert(t('tuneUnavail')); } catch (_) {} return; }
   const idx = clampInt($('idx-in').value, 0, 7, 0);
   const val = open ? clampInt($('open-in').value, 1, 250, 30) : clampInt($('legal-in').value, 1, 250, 20);
   const ok = await confirmDialog(open ? t('confirmOpenBody') : t('confirmLegalBody'));
@@ -331,8 +336,8 @@ function clampInt(v, lo, hi, def) { let n = parseInt(v, 10); if (isNaN(n)) n = d
 
 function onDisconnected() {
   connected = false; connecting = false; server = null;
-  tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; notifyChars.length = 0;
-  setStatus('disconnected'); resetTiles(); setDrosselEnabled(false); updateConnButton();
+  tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; notifyChars.length = 0; lastFrame = {};
+  setStatus('disconnected'); resetTiles(); setDrosselEnabled(false); updateTuneNote(); updateConnButton();
   log('disconnected', 'log-err');
 }
 function disconnectBle() {
@@ -353,7 +358,16 @@ function updateDrosselButtons() {
   if (br) br.textContent = t('btnReadTune');
 }
 function setDrosselEnabled(on) {
-  ['btn-open', 'btn-legal', 'btn-readtune', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) el.disabled = !on; });
+  const canWrite = on && !!tuneWriteChar;    // write buttons need the MotorTuning write characteristic (160D)
+  const canRead = on && !!tuneNotifyChar;    // read-tune needs the MotorTuning report characteristic (160C)
+  ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) el.disabled = !canWrite; });
+  const br = $('btn-readtune'); if (br) br.disabled = !canRead;
+}
+function updateTuneNote() {
+  const el = $('tune-note'); if (!el) return;
+  const show = connected && !tuneWriteChar;
+  el.hidden = !show;
+  if (show) el.textContent = t('tuneUnavail');
 }
 
 // ---- Dialogs ---------------------------------------------------------------
