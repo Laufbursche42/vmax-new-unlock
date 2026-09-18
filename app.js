@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v13';
+const BUILD = 'v14';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -130,6 +130,12 @@ function hapCanFrame(eid, payload) {
 function paramReadPayload(addr, len) {
   return new Uint8Array([0x10, addr & 0xff, (addr >> 8) & 0xff, (addr >> 16) & 0xff, len & 0xff, (len >> 8) & 0xff]);
 }
+// Known controller parameters (from the HAP v2 reconstruction) to read during the probe.
+const CAN_PARAMS = [
+  { addr: 496, len: 2, name: 'MaxSpeed deci-km/h' },
+  { addr: 536, len: 1, name: 'AssistLevelState' },
+  { addr: 600, len: 1, name: 'ThrottleEnabled' },
+];
 
 // MotorTuningValueType (ordinal) from the SDK
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
@@ -318,15 +324,17 @@ async function probeSpeedLimit() {
   try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN probe: characteristics unreadable: ' + e, 'log-err'); return; }
   const writeChars = chars.filter(c => { const p = c.properties || {}; return p.write || p.writeWithoutResponse; });
   if (!writeChars.length) { log('CAN probe: no writable characteristic in the CAN service', 'log-err'); return; }
-  // We do not know which write characteristic is the CAN command channel, so send the read request to
-  // every writable one and watch which triggers a notify. Sending a read request writes nothing to config.
-  const frame = hapCanFrame(HAP_EID_PARAM_READ, paramReadPayload(ADDR_MAX_SPEED, 2));
-  log('CAN probe: read speed limit (addr 496), trying each write characteristic of ' + svc.uuid + ' (' + writeChars.length + ')', 'log-tx');
+  // We do not know which write characteristic is the CAN command channel, so read every known parameter
+  // on each writable one. All of these are read requests - nothing is written to the configuration.
+  log('CAN probe: reading ' + CAN_PARAMS.length + ' parameters on ' + writeChars.length + ' write characteristics of ' + svc.uuid, 'log-tx');
   for (const c of writeChars) {
-    await writeRaw(c, frame, 'CAN read 496 -> ' + shortUuid(c.uuid));
-    await sleep(600);   // give the controller time to answer on the notify characteristic
+    for (const pr of CAN_PARAMS) {
+      const frame = hapCanFrame(HAP_EID_PARAM_READ, paramReadPayload(pr.addr, pr.len));
+      await writeRaw(c, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + ' -> ' + shortUuid(c.uuid));
+      await sleep(500);   // give the controller time to answer on the notify characteristic
+    }
   }
-  log('CAN probe: done - look for an RX on a CAN notify characteristic (1903/1904). No RX means the channel answered on none of the write characteristics.', 'log-tx');
+  log('CAN probe: done - look for RX on a CAN notify (1903/1904). The address in the response payload says which parameter answered.', 'log-tx');
 }
 
 let lastFrame = {};
