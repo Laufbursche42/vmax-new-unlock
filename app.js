@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v14';
+const BUILD = 'v15';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -136,6 +136,12 @@ const CAN_PARAMS = [
   { addr: 536, len: 1, name: 'AssistLevelState' },
   { addr: 600, len: 1, name: 'ThrottleEnabled' },
 ];
+// PairLink CAN-bridge control commands (written to the filter characteristic, not the controller). The
+// bridge forwards nothing until it is enabled - that is why plain reads got no answer. Replicate the
+// app: blacklist the noisy broadcast IDs 1952..1971, then enable (BafangCanConst.APPSetMaintainMile 0xAC).
+const CAN_NOISE_IDS = [0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7b0, 0x7b1, 0x7b2, 0x7b3];
+function canBlacklistFrame(id) { return new Uint8Array([0xAA, (id >>> 24) & 0xff, (id >>> 16) & 0xff, (id >>> 8) & 0xff, id & 0xff]); }
+const CAN_ENABLE_FRAME = new Uint8Array([0xAC, 0x00, 0x00, 0x00, 0x00]);
 
 // MotorTuningValueType (ordinal) from the SDK
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
@@ -324,9 +330,15 @@ async function probeSpeedLimit() {
   try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN probe: characteristics unreadable: ' + e, 'log-err'); return; }
   const writeChars = chars.filter(c => { const p = c.properties || {}; return p.write || p.writeWithoutResponse; });
   if (!writeChars.length) { log('CAN probe: no writable characteristic in the CAN service', 'log-err'); return; }
-  // We do not know which write characteristic is the CAN command channel, so read every known parameter
-  // on each writable one. All of these are read requests - nothing is written to the configuration.
-  log('CAN probe: reading ' + CAN_PARAMS.length + ' parameters on ' + writeChars.length + ' write characteristics of ' + svc.uuid, 'log-tx');
+  // Step 1 - start the PairLink CAN bridge: blacklist the noise IDs, then enable forwarding. We do not
+  // know which write characteristic is the filter channel, so send the init to each; the right one acts.
+  log('CAN probe: starting the CAN bridge (blacklist + enable) on ' + writeChars.length + ' write characteristics of ' + svc.uuid, 'log-tx');
+  for (const c of writeChars) {
+    for (const id of CAN_NOISE_IDS) { await writeRaw(c, canBlacklistFrame(id), 'CAN blacklist 0x' + id.toString(16) + ' -> ' + shortUuid(c.uuid)); await sleep(100); }
+    await writeRaw(c, CAN_ENABLE_FRAME, 'CAN enable -> ' + shortUuid(c.uuid)); await sleep(400);
+  }
+  // Step 2 - read the known controller parameters. Answers arrive on the CAN notify (1903/1904).
+  log('CAN probe: reading parameters (MaxSpeed 496, Assist 536, Throttle 600)', 'log-tx');
   for (const c of writeChars) {
     for (const pr of CAN_PARAMS) {
       const frame = hapCanFrame(HAP_EID_PARAM_READ, paramReadPayload(pr.addr, pr.len));
@@ -334,7 +346,7 @@ async function probeSpeedLimit() {
       await sleep(500);   // give the controller time to answer on the notify characteristic
     }
   }
-  log('CAN probe: done - look for RX on a CAN notify (1903/1904). The address in the response payload says which parameter answered.', 'log-tx');
+  log('CAN probe: done - after enable you should see RX (CAN frames) on the notify. The response to addr 496 is the speed limit.', 'log-tx');
 }
 
 let lastFrame = {};
