@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = '6';
+const BUILD = '7';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -192,7 +192,8 @@ let tuneWriteChar = null, tuneNotifyChar = null, timeSyncChar = null;
 const notifyChars = [];
 let connected = false, connecting = false;
 
-function shortUuid(uuid) { const m = /^0000([0-9a-f]{4})-/.exec(uuid); if (m) return m[1]; const n = /^da1a([0-9a-f]{4})-/.exec(uuid); return n ? n[1] : uuid; }
+// iOS WebKit (Bluefy) reports UUIDs uppercase, desktop Chrome lowercase - normalize before matching.
+function shortUuid(uuid) { uuid = String(uuid).toLowerCase(); const m = /^0000([0-9a-f]{4})-/.exec(uuid); if (m) return m[1]; const n = /^da1a([0-9a-f]{4})-/.exec(uuid); return n ? n[1] : uuid; }
 
 async function pickAndConnect() {
   if (!navigator.bluetooth) { log('Web Bluetooth not available in this browser', 'log-err'); try { alert(t('noBleAlert')); } catch (e) {} return; }
@@ -238,9 +239,10 @@ async function enumerateGatt() {
       const p = c.properties || {};
       const props = ['read', 'write', 'writeWithoutResponse', 'notify', 'indicate'].filter(k => p[k]).join(',') || '-';
       out.push('  chr ' + c.uuid + '  [' + props + ']');
-      if (c.uuid === TUNE_WRITE) tuneWriteChar = c;
-      if (c.uuid === TUNE_NOTIFY) tuneNotifyChar = c;
-      if (c.uuid === TIMESYNC_WRITE) timeSyncChar = c;
+      const cu = String(c.uuid).toLowerCase();     // iOS WebKit (Bluefy) reports UUIDs uppercase
+      if (cu === TUNE_WRITE) tuneWriteChar = c;
+      if (cu === TUNE_NOTIFY) tuneNotifyChar = c;
+      if (cu === TIMESYNC_WRITE) timeSyncChar = c;
       if (p.notify || p.indicate) {
         try { await c.startNotifications(); c.addEventListener('characteristicvaluechanged', onNotify); notifyChars.push(c); }
         catch (e) { out.push('    (subscribe failed: ' + e + ')'); }
