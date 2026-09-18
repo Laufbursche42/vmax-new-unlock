@@ -1,0 +1,48 @@
+# --- OS clutter ---
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.DS_Store
+.DS_Store?
+._*
+
+# --- Editors / IDEs ---
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Dev tooling only (nothing here is shipped) ---
+node_modules/
+npm-debug.log*
+
+# --- Python (local runs of tools/vmax_speed.py) ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# --- Secrets: never commit ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.jks
+*.p12
+*.keystore
+secrets.*
+token.txt
+
+# --- Logs / temp ---
+*.log
+*.tmp
+
+# --- Analyse-Artefakte, nie ins Tool-Repo ---
+*.ipa
+*.apk
+*.xapk
+*.db3

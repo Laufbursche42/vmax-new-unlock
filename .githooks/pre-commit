@@ -1,0 +1,170 @@
+#!/bin/sh
+#
+# pre-commit hook for vmax-new-unlock (adapted from the Laufbursche Edition hook).
+#
+#   Phase 0 - normalize Unicode dashes to ASCII '-' (auto-fix + re-stage).
+#   Phase A - syntax check every staged JS / HTML / JSON file.
+#   Phase B - scan staged content for secrets / credentials / Windows home paths.
+#   Phase C - personal-data / location-leak guard (OUT-OF-TREE blocklist).
+#   Phase D - web security scan (XSS/injection sinks, inline handlers, CSP, ...).
+#
+# Versioned under .githooks/ and activated with:  git config core.hooksPath .githooks
+#
+# Bypass:  git commit --no-verify   -> skip ALL hooks (use for a genuine false positive)
+
+set -u
+
+RC=0
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+TMPD=$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/pchook.$$")
+mkdir -p "$TMPD" 2>/dev/null || true
+trap 'rm -rf "$TMPD"' EXIT INT TERM
+
+echo "----- pre-commit: dashes + syntax + secrets + privacy + web-security ----"
+
+STAGED_LIST="$TMPD/staged.lst"
+git diff --cached --name-only --diff-filter=ACM -z > "$STAGED_LIST" 2>/dev/null || : > "$STAGED_LIST"
+
+if [ ! -s "$STAGED_LIST" ]; then
+  echo "No staged files. Nothing to check."
+  exit 0
+fi
+
+# =================================================================
+# PHASE 0 - normalize Unicode dashes to ASCII '-' (auto-fix + re-stage)
+# =================================================================
+DASH_CLASS='[\x{2010}-\x{2015}\x{2212}\x{FE58}\x{FE63}\x{FF0D}]'
+dash_blocked=""
+if command -v perl >/dev/null 2>&1; then
+  while IFS= read -r -d '' f; do
+    [ -n "$f" ] || continue
+    [ -f "$f" ] || continue
+    case "$f" in .githooks/*) continue ;; esac
+    perl -e 'exit(-B $ARGV[0] ? 0 : 1)' "$f" 2>/dev/null && continue          # skip binary
+    perl -CSD -0777 -ne "exit(/$DASH_CLASS/ ? 0 : 1)" "$f" 2>/dev/null || continue  # no dash -> skip
+    if git diff --quiet -- "$f" 2>/dev/null; then
+      perl -CSD -i -pe "s/$DASH_CLASS/-/g" "$f"
+      git add -- "$f"
+      echo "  normalized Unicode dashes -> '-': $f"
+    else
+      dash_blocked="$dash_blocked  $f
+"
+    fi
+  done < "$STAGED_LIST"
+fi
+if [ -n "$dash_blocked" ]; then
+  echo "BLOCK: Unicode dashes found, but these staged files also have UNSTAGED changes:"
+  printf '%s' "$dash_blocked"
+  echo "  -> stage the whole file (git add <file>) so the hook can normalize it, then re-commit."
+  RC=1
+fi
+
+# =================================================================
+# PHASE A - syntax checks
+# =================================================================
+# Node snippet: extract every inline <script> WITHOUT src= from an HTML file.
+HTML_EXTRACT='var fs=require("fs");var src=fs.readFileSync(process.argv[1],"utf8");var re=/<script\b([^>]*)>([\s\S]*?)<\/script>/gi;var out="";var m;while((m=re.exec(src))!==null){var a=m[1]||"";if(/\bsrc\s*=/i.test(a)){continue;}out+="\n"+m[2]+"\n;\n";}fs.writeFileSync(process.argv[2],out);'
+
+while IFS= read -r -d '' f; do
+  [ -n "$f" ] || continue
+  lf=$(printf '%s' "$f" | tr 'A-Z' 'a-z')
+  case "$lf" in
+    *.js)
+      if node --check "$f" 2>"$TMPD/err"; then echo "PASS  [js]   $f"
+      else echo "FAIL  [js]   $f"; sed 's/^/        /' "$TMPD/err"; RC=1; fi ;;
+    *.html|*.htm)
+      exj="$TMPD/inline.js"
+      if node -e "$HTML_EXTRACT" "$f" "$exj" 2>"$TMPD/err" && node --check "$exj" 2>"$TMPD/err"; then
+        echo "PASS  [html] $f (inline script)"
+      else echo "FAIL  [html] $f (inline script syntax error)"; sed 's/^/        /' "$TMPD/err"; RC=1; fi ;;
+    *.json)
+      if node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$f" 2>"$TMPD/err"; then echo "PASS  [json] $f"
+      else echo "FAIL  [json] $f"; sed 's/^/        /' "$TMPD/err"; RC=1; fi ;;
+  esac
+done < "$STAGED_LIST"
+
+# =================================================================
+# PHASE B - secret / credential scan of staged content
+# =================================================================
+SQ="'"
+DQ='"'
+JWT_RE='eyJ[A-Za-z0-9_-]{6,}\.eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]+'
+PEM_RE='-----BEGIN[A-Z ]*PRIVATE KEY-----'
+AWS_RE='AKIA[0-9A-Z]{16}'
+GAPI_RE='AIza[0-9A-Za-z_-]{35}'
+WINHOME_RE='[Cc]:\\Users\\[^\\]+\\'
+GENERIC_RE="(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|bearer)[${SQ}${DQ}[:space:]]*[:=][[:space:]]*[${SQ}${DQ}]?[^[:space:]${SQ}${DQ}]"
+PLACEHOLDER_RE="[:=][[:space:]]*[${SQ}${DQ}]?(your[-_ ]|<[A-Za-z.]|example|changeme|change-me|placeholder|redacted|dummy|sample|xxxx|\.\.\.|todo|replace[-_]?me)"
+REFERENCE_RE="[:=][[:space:]]*[${SQ}${DQ}]?([$]\{|system\.getenv|process\.env)"
+SEC_HITS=0
+
+scan_content() {
+  _f=$1; _c=$2
+  if grep -aqE  -e "$JWT_RE"     "$_c"; then echo "BLOCK $_f : rule=jwt-token";            SEC_HITS=1; RC=1; fi
+  if grep -aqE  -e "$PEM_RE"     "$_c"; then echo "BLOCK $_f : rule=pem-private-key";       SEC_HITS=1; RC=1; fi
+  if grep -aqE  -e "$AWS_RE"     "$_c"; then echo "BLOCK $_f : rule=aws-access-key";        SEC_HITS=1; RC=1; fi
+  if grep -aqE  -e "$GAPI_RE"    "$_c"; then echo "BLOCK $_f : rule=google-api-key";        SEC_HITS=1; RC=1; fi
+  if grep -aqE  -e "$WINHOME_RE" "$_c"; then echo "BLOCK $_f : rule=windows-home-path";     SEC_HITS=1; RC=1; fi
+  if grep -ainE -e "$GENERIC_RE" "$_c" | grep -aivE -e "$PLACEHOLDER_RE" | grep -aivE -e "$REFERENCE_RE" | grep -aq .; then
+    echo "BLOCK $_f : rule=generic-secret-assignment"; SEC_HITS=1; RC=1
+  fi
+}
+
+while IFS= read -r -d '' f; do
+  [ -n "$f" ] || continue
+  case "$f" in .githooks/*|.gitignore|scripts/*) continue ;; esac
+  base=$(basename "$f")
+  case "$base" in
+    token.txt|id_rsa|.env)                echo "BLOCK $f : rule=sensitive-filename"; SEC_HITS=1; RC=1 ;;
+    *.pem|*.jks|*.keystore|*.p12|*.token) echo "BLOCK $f : rule=sensitive-filename"; SEC_HITS=1; RC=1 ;;
+    secrets.*)                            echo "BLOCK $f : rule=sensitive-filename"; SEC_HITS=1; RC=1 ;;
+  esac
+  blob="$TMPD/blob"
+  if git show ":$f" > "$blob" 2>/dev/null; then scan_content "$f" "$blob"; fi
+done < "$STAGED_LIST"
+[ "$SEC_HITS" = "0" ] && echo "OK    [secrets] none in staged content"
+
+# =================================================================
+# PHASE C - personal-data / location-leak guard (OUT-OF-TREE blocklist)
+# =================================================================
+# Terms live OUTSIDE the tree at .git/sf-personal-blocklist.txt (one term per line,
+# '#' = comment). That path can never be committed/pushed, so the terms never leak.
+# On a hit only the FILE is printed, never the matched term.
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo .git)
+PD_LIST="$GIT_DIR/sf-personal-blocklist.txt"
+if [ -f "$PD_LIST" ]; then
+  PD_TERMS=$(sed 's/#.*$//' "$PD_LIST" | sed 's/[[:space:]]*$//' | grep -avE '^[[:space:]]*$' || true)
+  if [ -n "$PD_TERMS" ]; then
+    PD_ALT=$(printf '%s\n' "$PD_TERMS" | paste -sd'|' -)
+    PD_RE="\\b(${PD_ALT})\\b"
+    PD_HITS=0
+    while IFS= read -r -d '' f; do
+      [ -n "$f" ] || continue
+      case "$f" in .githooks/*|.gitignore) continue ;; esac
+      blob="$TMPD/pdblob"
+      if git show ":$f" > "$blob" 2>/dev/null && grep -aiqE -e "$PD_RE" "$blob"; then
+        echo "BLOCK $f : rule=personal-data (a term from your local .git/sf-personal-blocklist.txt is present)"
+        PD_HITS=1; RC=1
+      fi
+    done < "$STAGED_LIST"
+    [ "$PD_HITS" = "0" ] && echo "OK    [privacy] no blocklisted personal-data terms in staged content"
+  fi
+fi
+
+# =================================================================
+# PHASE D - web security scan (XSS/injection sinks, inline handlers, CSP, ...)
+# =================================================================
+if command -v py >/dev/null 2>&1; then PY="py -3"; elif command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+if [ -f "$REPO_ROOT/scripts/security-scan.py" ]; then
+  if $PY "$REPO_ROOT/scripts/security-scan.py"; then :; else RC=1; fi
+fi
+
+# =================================================================
+echo "-----------------------------------------------------------------"
+if [ "$RC" -ne 0 ]; then
+  echo "pre-commit FAILED -- commit blocked. Fix the issues above (bypass a genuine false positive with: git commit --no-verify)."
+  exit 1
+fi
+echo "pre-commit PASSED."
+exit 0

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Laufbursche Edition badge (from teverun-lb-edition assets/dashboard/logo.svg). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108" fill="none" role="img" aria-label="Laufbursche Edition">
+  <defs>
+    <radialGradient id="lbBadge" gradientUnits="userSpaceOnUse" cx="54" cy="49" r="80">
+      <stop offset="0" stop-color="#1A222C"/>
+      <stop offset="0.6" stop-color="#101418"/>
+      <stop offset="1" stop-color="#0A0D11"/>
+    </radialGradient>
+    <linearGradient id="lbBolt" gradientUnits="userSpaceOnUse" x1="63" y1="34" x2="69" y2="70">
+      <stop offset="0" stop-color="#D8FF57"/>
+      <stop offset="1" stop-color="#2FEBA2"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="108" height="108" rx="24" fill="url(#lbBadge)"/>
+  <g stroke="#BCEB39" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M26.5,71 a8.5,8.5 0 1,0 17,0 a8.5,8.5 0 1,0 -17,0"/>
+    <path d="M57.5,71 a8.5,8.5 0 1,0 17,0 a8.5,8.5 0 1,0 -17,0"/>
+    <path d="M24,67 L58,67 L66,71"/>
+    <path d="M61,36 L79,33"/>
+  </g>
+  <path d="M70,34 L60,55 L66,55 L64,70 L75,48 L68,48 Z" fill="url(#lbBolt)"/>
+</svg>

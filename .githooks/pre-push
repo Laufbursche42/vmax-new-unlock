@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# pre-push hook for vmax-new-unlock: full-tree security gate before a push.
+# Runs node --check on every tracked JS plus the full web security scan.
+# The fast per-file / per-commit checks live in .githooks/pre-commit.
+#
+# Bypass:  git push --no-verify
+#
+# Activated via: git config core.hooksPath .githooks
+
+set -u
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$REPO_ROOT" || exit 0
+
+echo "----- pre-push: full security scan ------------------------------"
+RC=0
+if command -v py >/dev/null 2>&1; then PY="py -3"; elif command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+
+for f in $(git ls-files '*.js'); do
+  if node --check "$f"; then echo "PASS [js] $f"; else echo "FAIL [js] $f"; RC=1; fi
+done
+
+if [ -f scripts/security-scan.py ]; then
+  $PY scripts/security-scan.py || RC=1
+fi
+
+echo "-----------------------------------------------------------------"
+if [ "$RC" -ne 0 ]; then
+  echo "pre-push BLOCKED. Fix the issues above (bypass a genuine false positive with: git push --no-verify)."
+  exit 1
+fi
+echo "pre-push PASSED."
+exit 0

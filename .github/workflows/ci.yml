@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-scan:
+    name: Lint + security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: JavaScript syntax check
+        run: |
+          for f in $(git ls-files '*.js'); do
+            echo "node --check $f"
+            node --check "$f"
+          done
+      - name: Security + structure scan
+        run: python3 scripts/security-scan.py

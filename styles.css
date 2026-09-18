@@ -1,0 +1,196 @@
+/* VMAX Tool. Palette and theme mechanics from the Laufbursche Edition template.
+   Dark is the default; the light set below is switched in by data-theme on <html>. */
+:root {
+  --bg: #0A0C10; --card: #111420; --line: #1C2035; --text: #E4EDF6; --label: #C6D2E2;
+  --muted: #8A93A8; --accent: #B8F020; --value: #BCEB39; --good: #1EE89A; --bad: #FF5050;
+  --warn: #FFAA18; --gps: #3DB8FF; --mono: ui-monospace, Consolas, monospace;
+  --scroll: #2B3350; --field: #0d1018; --chip: #171b2a; --on-accent: #0A0C10;
+  color-scheme: dark;
+  --warn-bg: #FFAA1814; --warn-line: #FFAA1840; --warn-strong: #ffc65a;
+  --bad-bg: #FF505014; --bad-line: #FF505040; --bad-strong: #ff8080;
+  --bad-line-soft: #3a2030; --warn-line-soft: #3a3020;
+  --backdrop: rgba(0,0,0,.72); --shadow: rgba(0,0,0,.5);
+  --tx: #6cb6ff; --rx: #e0b25a;
+}
+[data-theme="light"] {
+  --bg: #E8EDF5; --card: #FFFFFF; --line: #CDD5E4; --text: #0A0D18; --label: #0A0D18;
+  --muted: #4A5468;
+  --accent: #2A6A00; --value: #2A6A00; --good: #1B7A4B; --bad: #CC2020;
+  --warn: #A05800; --gps: #005AA0;
+  --scroll: #B6C0D4; --field: #FFFFFF; --chip: #F1F4FA; --on-accent: #FFFFFF;
+  color-scheme: light;
+  --warn-strong: #7A4300; --bad-strong: #A01818;
+  --bad-line-soft: #E0B4B4; --warn-line-soft: #E0CBA4;
+  --backdrop: rgba(10,13,24,.45); --shadow: rgba(10,13,24,.18);
+  --tx: #0b6bcb; --rx: #8a5a00;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+* { scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
+@supports not (scrollbar-width: thin) {
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scroll); border-radius: 11px;
+    border: 3px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+}
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45;
+  padding: max(14px, env(safe-area-inset-top)) 14px 40px;
+}
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+header { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+h1 { font-size: 17px; margin: 0; letter-spacing: .01em; line-height: 1.2; }
+h1 span { color: var(--accent); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px; }
+.card h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  margin: 0; font-weight: 700; }
+.sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0 2px; width: 100%; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btns button { width: 100%; }
+.span2 { grid-column: 1 / -1; }
+button {
+  appearance: none; border: 1px solid var(--line); background: var(--chip); color: var(--text);
+  padding: 12px 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
+  flex: 1 1 auto; text-align: center; text-decoration: none; display: inline-block;
+}
+button:active { transform: translateY(1px); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+input, select {
+  background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 15px; font-family: var(--mono); min-width: 0; flex: 1 1 90px;
+}
+input:disabled, select:disabled, button:disabled { opacity: .45; cursor: not-allowed; }
+label { color: var(--label); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.head-right { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.head-tools { display: flex; align-items: center; gap: 8px; }
+.langs { display: flex; gap: 4px; }
+.langs button { flex: 0 0 auto; padding: 4px 7px; font-family: var(--mono); font-size: 11px;
+  font-weight: 700; letter-spacing: .06em; background: transparent; color: var(--muted);
+  border-radius: 6px; }
+.langs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.theme-btn { flex: 0 0 auto; width: 28px; height: 24px; padding: 0; line-height: 1;
+  background: transparent; border-color: var(--line); color: var(--label); font-size: 14px; }
+.theme-btn:hover { color: var(--accent); }
+
+.status { font-family: var(--mono); font-size: 13px; padding: 3px 9px; border-radius: 999px;
+  background: var(--chip); color: var(--muted); border: 1px solid var(--line); }
+.status[data-state="connected"] { color: var(--accent); border-color: var(--accent); }
+.status[data-state="disconnected"], .status[data-state="no-service"], .status[data-state="no-char"] { color: var(--bad); border-color: var(--bad-line-soft); }
+.status[data-state="connecting"], .status[data-state="linking"] { color: var(--warn); border-color: var(--warn-line-soft); }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.tile { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
+.tile b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--value); }
+.tile small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.hint { color: var(--muted); font-size: 12px; margin: 0; }
+.hint a, .warn a { color: var(--accent); }
+.warn { color: var(--warn); font-size: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line);
+  border-radius: 8px; padding: 9px 11px; margin: 0; }
+.warn b { color: var(--warn-strong); }
+pre#log { margin: 0; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+  font-family: var(--mono); font-size: 11.5px; color: var(--muted); max-height: 220px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; overscroll-behavior: contain; }
+.log-tx { color: var(--tx); }
+.log-rx { color: var(--rx); }
+.log-ok { color: var(--good); }
+.log-err { color: var(--bad); }
+.foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 2px; }
+.foot-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; }
+.foot a { color: var(--accent); font-size: 12px; text-decoration: none; }
+.foot a:hover { text-decoration: underline; }
+.foot .ver { color: var(--muted); font-size: 12px; white-space: nowrap; }
+code { font-family: var(--mono); font-size: 12px; background: var(--field); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px; color: var(--value); word-break: break-all; }
+
+/* Two settings columns share one grid, so field and button line up across rows. */
+.set-row { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: 10px; align-items: center; }
+.set-row label { grid-column: 1 / -1; }
+.set-row input, .set-row select, .set-row button { width: 100%; flex: none; }
+
+/* Document viewer. Only the open dialog is a flex column. */
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  color: var(--text); max-width: 44rem; width: calc(100% - 2rem); padding: 0; }
+dialog::backdrop { background: var(--backdrop); }
+#doc { max-height: 88vh; overflow: hidden; }
+#doc[open] { display: flex; flex-direction: column; }
+.doc-head { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.doc-head h3 { margin: 0; font-size: 15px; color: var(--text); }
+#doc-x, #help-x { flex: 0 0 auto; background: none; border: 0; color: var(--label); font-size: 22px;
+  line-height: 1; padding: 0 4px; }
+#doc-x:hover, #help-x:hover { color: var(--accent); }
+.doc-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain;
+  color: var(--label); font-size: 13.5px; }
+.doc-body > :first-child { margin-top: 0; }
+.doc-body h1 { font-size: 16px; color: var(--text); margin: 0 0 12px; }
+.doc-body h2 { font-size: 14px; color: var(--accent); margin: 22px 0 8px; }
+.doc-body h3, .doc-body h4 { font-size: 13.5px; color: var(--text); margin: 16px 0 6px; }
+.doc-body p { margin: 0 0 11px; }
+.doc-body ul, .doc-body ol { margin: 0 0 12px; padding-left: 18px; }
+.doc-body li { margin-bottom: 5px; }
+.doc-body b { color: var(--text); }
+.doc-body ul.nested { margin: 6px 0 2px; padding-left: 16px; }
+.doc-body ul.nested li { margin-bottom: 3px; }
+.doc-body a { color: var(--accent); }
+.doc-body code { font-family: var(--mono); font-size: .88em; background: var(--field);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+.doc-body pre { background: var(--field); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; margin: 0 0 12px; overflow-x: auto; }
+.doc-body pre code { border: 0; background: none; padding: 0; font-size: 12px; line-height: 1.6; }
+.doc-body hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+.doc-body blockquote { margin: 0 0 12px; padding-left: 11px; color: var(--muted);
+  border-left: 2px solid var(--line); }
+.doc-table { overflow-x: auto; margin: 0 0 12px; }
+.doc-body table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.doc-body th, .doc-body td { border: 1px solid var(--line); padding: 7px 9px; text-align: left;
+  vertical-align: top; }
+.doc-body th { color: var(--text); background: var(--field); }
+.doc-foot { display: flex; justify-content: center; padding: 14px 16px;
+  border-top: 1px solid var(--line); }
+.doc-foot button { flex: 0 0 auto; padding: 10px 22px; }
+
+/* Shortcut links (Verknuepfungen) - exakt nach trfm-unlock: vertikaler Stack, URL-Box in --value. */
+.linkrow { display: flex; flex-direction: column; gap: 5px; }
+.linkrow .lbl { color: var(--label); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.copy { margin: 0; font-family: var(--mono); font-size: 11.5px; background: var(--field); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 11px; color: var(--value); white-space: pre-wrap; word-break: break-all;
+  -webkit-user-select: all; user-select: all; }
+.copy-offscreen { position: fixed; top: -1000px; opacity: 0; }
+
+
+/* Help "?" icon in a card header, opens a modal with the explanation. */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.help-btn { flex: 0 0 auto; width: 22px; height: 22px; min-width: 22px; padding: 0; border-radius: 50%;
+  font-size: 13px; font-weight: 700; line-height: 1; background: var(--chip); border: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; }
+.help-btn:hover { color: var(--accent); border-color: var(--accent); }
+#help { max-width: 520px; }
+#help #help-body { margin: 0; }
+
+/* Dynamic settings list (more-card): group headers between the set-rows. */
+.set-group { margin: 8px 0 2px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; }
+#settings-list .set-row { margin-bottom: 8px; }
+#confirm { max-width: 420px; }
+#confirm .doc-foot { gap: 10px; }
+
+/* Setting row label with an inline "?" help button on the right. The generic
+   ".set-row button { width: 100% }" rule would otherwise stretch the "?" across the
+   whole row, so pin it back to a small round button here (higher specificity). */
+.set-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.set-label span { min-width: 0; flex: 1 1 auto; }
+.set-label .help-btn { flex: 0 0 auto; width: 22px; min-width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+
+/* Speed card: the two values (open / eKFV) side by side, each label stacked over its input. */
+.speed-values { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.speed-values .sv { display: flex; flex-direction: column; gap: 6px; }
+.speed-values .sv input { width: 100%; flex: none; }
+
+/* Red warning line inside the "?" help dialog, shown only for risky settings. */
+.help-warn { color: var(--bad); font-weight: 600; margin: 10px 0 0; }

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<!-- frame-ancestors has no effect in a meta element, only as an HTTP header. GitHub Pages sends no
+     custom headers, so it is left out here. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-t="pageTitle">Laufbursche VMAX new Tool</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Laufbursche <span data-t="brandSub"></span></h1>
+    <div class="head-right">
+      <span class="status" id="status" data-state="disconnected">disconnected</span>
+      <div class="head-tools">
+        <button type="button" class="theme-btn" id="btn-theme">&#9728;</button>
+        <div class="langs" id="langs" role="group">
+          <button type="button" data-lang="de" aria-pressed="true">DE</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2 data-t="s1Title"></h2>
+    <p class="hint" data-t="sub"></p>
+    <p class="warn" data-t="expWarn"></p>
+    <p class="hint" data-t="ownDevice"></p>
+  </div>
+
+  <div class="card">
+    <h2 data-t="s2Title"></h2>
+    <div class="set-row">
+      <label data-t="modelLabel"></label>
+      <select id="model-in"></select>
+    </div>
+    <p class="hint" data-t="modelHint"></p>
+    <div class="btns">
+      <button class="primary span2" id="btn-conn"></button>
+    </div>
+    <p class="hint" id="devinfo"></p>
+    <p class="hint" data-t="controlsHint"></p>
+  </div>
+
+  <div class="card">
+    <h2 data-t="liveTitle"></h2>
+    <div class="grid">
+      <div class="tile"><b id="t-speed">-</b><small data-t="tileSpeed"></small></div>
+      <div class="tile"><b id="t-maxnow">-</b><small data-t="tileMaxNow"></small></div>
+      <div class="tile"><b id="t-maxcap">-</b><small data-t="tileMaxCap"></small></div>
+      <div class="tile"><b id="t-idx">-</b><small data-t="tileIdx"></small></div>
+      <div class="tile"><b id="t-batt">-</b><small data-t="tileBatt"></small></div>
+      <div class="tile"><b id="t-lock">-</b><small data-t="tileLock"></small></div>
+    </div>
+    <p class="hint" data-t="liveHint"></p>
+  </div>
+
+  <div class="card" id="drossel-card">
+    <div class="card-head"><h2 data-t="drosselTitle"></h2><button type="button" class="help-btn" data-help="drossel" aria-label="Info">?</button></div>
+    <p class="hint" data-t="drosselIntro"></p>
+    <div class="btns">
+      <button class="primary" id="btn-open" disabled></button>
+      <button id="btn-legal" disabled></button>
+    </div>
+    <div class="speed-values">
+      <div class="sv"><label data-t="lblOpen"></label><input id="open-in" type="number" step="1" min="1" max="250" value="30" disabled></div>
+      <div class="sv"><label data-t="lblLegal"></label><input id="legal-in" type="number" step="1" min="1" max="250" value="20" disabled></div>
+      <div class="sv"><label data-t="lblIdx"></label><input id="idx-in" type="number" step="1" min="0" max="7" value="0" disabled></div>
+    </div>
+    <div class="btns">
+      <button id="btn-readtune" disabled></button>
+    </div>
+    <p class="warn" data-t="drosselWarn"></p>
+    <p class="hint" data-t="drosselHint"></p>
+  </div>
+
+  <div class="card">
+    <h2 data-t="charsTitle"></h2>
+    <p class="hint" data-t="charsHint"></p>
+    <pre id="chars"></pre>
+  </div>
+
+  <div class="card">
+    <h2 data-t="s6Title"></h2>
+    <div class="btns">
+      <button type="button" id="btn-copy-log" data-t="btnCopyLog"></button>
+      <button type="button" id="btn-clear-log" data-t="btnClearLog"></button>
+      <button type="button" id="btn-diag" data-t="btnDiag"></button>
+    </div>
+    <p class="hint" data-t="diagHint"></p>
+    <pre id="log"></pre>
+    <p class="hint"><span class="log-tx" data-t="logTxLegend"></span>, <span class="log-rx" data-t="logRxLegend"></span></p>
+  </div>
+
+  <footer class="foot">
+    <span class="foot-links">
+      <a id="link-guide" href="GUIDE.de.md" data-doc="GUIDE" data-t="footGuide"></a>
+      <a href="https://github.com/Laufbursche42/vmax-new-unlock" target="_blank" rel="noopener" data-t="footSource"></a>
+      <a id="link-readme" href="README.md" data-doc="README" data-t="footReadme"></a>
+      <a id="link-disclaimer" href="#" data-t="footDisclaimer"></a>
+      <a id="link-license" href="LICENSE.de.md" data-doc="LICENSE" data-t="footLicense"></a>
+      <a id="link-privacy" href="PRIVACY.de.md" data-doc="PRIVACY" data-t="footPrivacy"></a>
+      <a id="link-trademarks" href="TRADEMARKS.de.md" data-doc="TRADEMARKS" data-t="footTrademarks"></a>
+    </span>
+    <span class="ver" id="build-ver"></span>
+  </footer>
+</div>
+
+<dialog id="doc" aria-labelledby="doc-title">
+  <div class="doc-head">
+    <h3 id="doc-title"></h3>
+    <button type="button" id="doc-x">&times;</button>
+  </div>
+  <div class="doc-body" id="doc-body"></div>
+  <div class="doc-foot">
+    <button type="button" id="doc-close" data-t="docClose"></button>
+  </div>
+</dialog>
+
+<dialog id="help" aria-labelledby="help-title">
+  <div class="doc-head">
+    <h3 id="help-title"></h3>
+    <button type="button" id="help-x">&times;</button>
+  </div>
+  <div class="doc-body"><p id="help-body"></p><p id="help-warn" class="help-warn" hidden></p></div>
+  <div class="doc-foot">
+    <button type="button" id="help-close" data-t="docClose"></button>
+  </div>
+</dialog>
+
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <div class="doc-head">
+    <h3 id="confirm-title" data-t="riskyTitle"></h3>
+    <button type="button" id="confirm-cancel-x">&times;</button>
+  </div>
+  <div class="doc-body"><p id="confirm-body"></p></div>
+  <div class="doc-foot">
+    <button type="button" id="confirm-cancel" data-t="riskyCancel"></button>
+    <button type="button" id="confirm-ok" class="primary" data-t="riskyOk"></button>
+  </div>
+</dialog>
+
+<script src="i18n.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
