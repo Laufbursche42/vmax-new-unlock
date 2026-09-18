@@ -72,7 +72,7 @@ if command -v perl >/dev/null 2>&1; then
   _bn=$(git rev-list --count HEAD 2>/dev/null || echo 0); _bn=$((_bn + 1))
   if [ -f "$REPO_ROOT/app.js" ] && grep -q "const BUILD = '" "$REPO_ROOT/app.js"; then
     if git diff --quiet -- app.js 2>/dev/null; then
-      perl -CSD -i -pe "s/const BUILD = '[^']*';/const BUILD = '$_bn';/" "$REPO_ROOT/app.js"
+      perl -CSD -i -pe "s/const BUILD = '[^']*';/const BUILD = 'v$_bn';/" "$REPO_ROOT/app.js"
       if node --check "$REPO_ROOT/app.js" 2>"$TMPD/stamperr"; then
         git add -- app.js; echo "  stamped build -> $_bn (app.js)"
       else
