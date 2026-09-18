@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v11';
+const BUILD = 'v12';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -109,7 +109,27 @@ const TIMESYNC_WRITE = u('1607');     // handshake: WriteTimeSync sends 6 time b
 // strings of the DA1A service roots we actually read - the same all-128-bit shape the vmax-unlock tool
 // uses, which connects fine in that same Bluefy. Characteristics live under these roots; listing the
 // roots is enough to enumerate every characteristic after connect.
-const OPTIONAL_SERVICES = ['1500', '1600', '1800', '1a00', '1c00', '1e00', '1f00'].map(u);
+// Hylink "Hyena Drive" CAN-over-BLE control service (SDK UUID). On the real VMAX it is very likely
+// remapped into DA1A1900 - add both plus the serial bridge DA1A1700 so the channel can be reached.
+const HYENA_SERVICE = '48592800-6879-656e-6174-656b2e485550';
+const OPTIONAL_SERVICES = ['1500', '1600', '1700', '1800', '1900', '1a00', '1c00', '1e00', '1f00'].map(u).concat([HYENA_SERVICE]);
+
+// ---- Hylink HAP v2 (CAN over BLE) ------------------------------------------
+// A packet is [EID 4B big-endian][DLC 1B][payload <=8B] in a 13-byte slot. Controller message IDs are
+// >= 0x20000 and carry bit 31. Parameter read opcode 0x10 (write 0x11 is intentionally not used here).
+const HAP_EID_PARAM_READ = 0x80020000;     // 0x20000 | 0x80000000
+const ADDR_MAX_SPEED = 496;                // controller parameter, deci-km/h (value / 10 = km/h)
+function hapCanFrame(eid, payload) {
+  const f = new Uint8Array(13);
+  f[0] = (eid >>> 24) & 0xff; f[1] = (eid >>> 16) & 0xff; f[2] = (eid >>> 8) & 0xff; f[3] = eid & 0xff;   // EID big-endian
+  f[4] = payload.length & 0xff;                                                                           // DLC
+  for (let i = 0; i < payload.length && i < 8; i++) f[5 + i] = payload[i];
+  return f;
+}
+// Parameter-read payload: [0x10][addr 3B little-endian][len 2B little-endian]
+function paramReadPayload(addr, len) {
+  return new Uint8Array([0x10, addr & 0xff, (addr >> 8) & 0xff, (addr >> 16) & 0xff, len & 0xff, (len >> 8) & 0xff]);
+}
 
 // MotorTuningValueType (ordinal) from the SDK
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
@@ -283,6 +303,30 @@ async function readAll() {
   log('read all done', 'log-ok');
 }
 
+// CAN probe: send a HAP v2 parameter-read for the speed-limit address over the Hyena/CAN service and
+// let the raw response frames show up on the CAN notify characteristic (ISO-TP segmented). This only
+// requests a value - it writes nothing to the scooter's configuration.
+async function probeSpeedLimit() {
+  if (!connected || !server) { log('not connected', 'log-err'); return; }
+  let writeChar = null, svcUuid = '';
+  try {
+    const services = await server.getPrimaryServices();
+    for (const svc of services) {
+      const su = String(svc.uuid).toLowerCase();
+      if (su !== HYENA_SERVICE && !/^da1a1900-/.test(su)) continue;    // only the CAN control service
+      let chars = [];
+      try { chars = await svc.getCharacteristics(); } catch (e) { continue; }
+      for (const c of chars) { const p = c.properties || {}; if (p.write || p.writeWithoutResponse) { writeChar = c; svcUuid = svc.uuid; break; } }
+      if (writeChar) break;
+    }
+  } catch (e) { log('CAN probe: service scan failed: ' + e, 'log-err'); return; }
+  if (!writeChar) { log('CAN probe: no Hyena / DA1A1900 write characteristic on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  const frame = hapCanFrame(HAP_EID_PARAM_READ, paramReadPayload(ADDR_MAX_SPEED, 2));
+  log('CAN probe: read speed limit (addr 496) via ' + shortUuid(writeChar.uuid) + ' on service ' + svcUuid, 'log-tx');
+  await writeRaw(writeChar, frame, 'CAN param-read 496');
+  log('CAN probe: sent - watch the RX lines on the CAN notify characteristic (response is ISO-TP, may span several frames)', 'log-tx');
+}
+
 let lastFrame = {};
 function onNotify(ev) {
   const dv = ev.target.value;
@@ -387,6 +431,7 @@ function setDrosselEnabled(on) {
   ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) el.disabled = !canWrite; });
   const br = $('btn-readtune'); if (br) br.disabled = !canRead;
   const ra = $('btn-readall'); if (ra) ra.disabled = !on;     // read-all works whenever connected
+  const cp = $('btn-canprobe'); if (cp) cp.disabled = !on;    // CAN speed-limit probe, whenever connected
 }
 function updateTuneNote() {
   const el = $('tune-note'); if (!el) return;
@@ -490,6 +535,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btn-legal').addEventListener('click', () => writeDrossel(false));
   $('btn-readtune').addEventListener('click', readTune);
   { const b = $('btn-readall'); if (b) b.addEventListener('click', readAll); }
+  { const b = $('btn-canprobe'); if (b) b.addEventListener('click', probeSpeedLimit); }
   { const b = $('btn-copy-log'); if (b) b.addEventListener('click', copyLog); }
   { const b = $('btn-clear-log'); if (b) b.addEventListener('click', clearLog); }
   { const b = $('btn-diag'); if (b) b.addEventListener('click', scanAllDevicesDiagnostic); }

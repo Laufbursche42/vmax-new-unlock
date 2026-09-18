@@ -33,6 +33,8 @@ window.I18N = {
     connectNoDevice: "Kein Gerät ausgewählt. Tippe auf Verbinden und wähle deinen VMAX aus der Liste. Bluetooth muss an sein und der Scooter eingeschaltet und in Reichweite. Prüfe in den iPhone-Einstellungen, dass Bluefy die Bluetooth-Freigabe hat.",
     tuneUnavail: "Dieses Scooter-Modell bietet über Bluetooth keinen Schreibzugriff auf die Drossel - das dafür nötige Merkmal fehlt in seiner Firmware. Verbinden, Live-Werte und Auslesen funktionieren weiter. Ob und wo sich die Drossel dieser neueren Modelle schreiben lässt, ist noch offen und wird untersucht.",
     btnReadAll: "Alles auslesen",
+    btnCanProbe: "Drossel lesen (CAN)",
+    canNotFound: "Dieser Scooter zeigt keinen CAN-Steuerkanal (Hyena/DA1A1900). Entweder bietet die Firmware ihn nicht offen an oder er heißt anders. Bitte schick den kompletten Merkmals-Block aus dem Log.",
 
     liveTitle: "Live-Werte vom Scooter",
     tileSpeed: "Geschwindigkeit",
@@ -116,6 +118,8 @@ window.I18N = {
     connectNoDevice: "No device selected. Tap Connect and pick your VMAX from the list. Bluetooth must be on and the scooter switched on and in range. In iPhone Settings check that Bluefy has the Bluetooth permission.",
     tuneUnavail: "This scooter model offers no Bluetooth write access to the speed limiter - the characteristic needed for it is missing from its firmware. Connecting, live values and reading still work. Whether and where the limiter on these newer models can be written is still open and under investigation.",
     btnReadAll: "Read all values",
+    btnCanProbe: "Read speed limit (CAN)",
+    canNotFound: "This scooter exposes no CAN control channel (Hyena / DA1A1900). Either the firmware does not offer it openly or it uses a different UUID. Please send the full characteristics block from the log.",
 
     liveTitle: "Live values from the scooter",
     tileSpeed: "Speed",
