@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v15';
+const BUILD = 'v16';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -330,12 +330,15 @@ async function probeSpeedLimit() {
   try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN probe: characteristics unreadable: ' + e, 'log-err'); return; }
   const writeChars = chars.filter(c => { const p = c.properties || {}; return p.write || p.writeWithoutResponse; });
   if (!writeChars.length) { log('CAN probe: no writable characteristic in the CAN service', 'log-err'); return; }
-  // Step 1 - start the PairLink CAN bridge: blacklist the noise IDs, then enable forwarding. We do not
-  // know which write characteristic is the filter channel, so send the init to each; the right one acts.
-  log('CAN probe: starting the CAN bridge (blacklist + enable) on ' + writeChars.length + ' write characteristics of ' + svc.uuid, 'log-tx');
+  // Step 1 - start the CAN bridge the Hyena way: ENABLE first, then blacklist the noise IDs (this order
+  // is what the app uses). We do not know which write characteristic is the filter channel, so send the
+  // init to each; the right one acts. If the bridge is the PairLink variant instead, it will stay silent
+  // and answer a write on 1904 with a ~16 byte encrypted block - that is the crypto handshake we cannot do.
+  log('CAN probe: starting the CAN bridge (enable, then blacklist) on ' + writeChars.length + ' write characteristics of ' + svc.uuid, 'log-tx');
   for (const c of writeChars) {
+    await writeRaw(c, CAN_ENABLE_FRAME, 'CAN enable -> ' + shortUuid(c.uuid)); await sleep(200);
     for (const id of CAN_NOISE_IDS) { await writeRaw(c, canBlacklistFrame(id), 'CAN blacklist 0x' + id.toString(16) + ' -> ' + shortUuid(c.uuid)); await sleep(100); }
-    await writeRaw(c, CAN_ENABLE_FRAME, 'CAN enable -> ' + shortUuid(c.uuid)); await sleep(400);
+    await sleep(300);
   }
   // Step 2 - read the known controller parameters. Answers arrive on the CAN notify (1903/1904).
   log('CAN probe: reading parameters (MaxSpeed 496, Assist 536, Throttle 600)', 'log-tx');
