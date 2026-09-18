@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v12';
+const BUILD = 'v13';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -308,23 +308,25 @@ async function readAll() {
 // requests a value - it writes nothing to the scooter's configuration.
 async function probeSpeedLimit() {
   if (!connected || !server) { log('not connected', 'log-err'); return; }
-  let writeChar = null, svcUuid = '';
+  let svc = null;
   try {
     const services = await server.getPrimaryServices();
-    for (const svc of services) {
-      const su = String(svc.uuid).toLowerCase();
-      if (su !== HYENA_SERVICE && !/^da1a1900-/.test(su)) continue;    // only the CAN control service
-      let chars = [];
-      try { chars = await svc.getCharacteristics(); } catch (e) { continue; }
-      for (const c of chars) { const p = c.properties || {}; if (p.write || p.writeWithoutResponse) { writeChar = c; svcUuid = svc.uuid; break; } }
-      if (writeChar) break;
-    }
+    for (const s of services) { const su = String(s.uuid).toLowerCase(); if (su === HYENA_SERVICE || /^da1a1900-/.test(su)) { svc = s; break; } }
   } catch (e) { log('CAN probe: service scan failed: ' + e, 'log-err'); return; }
-  if (!writeChar) { log('CAN probe: no Hyena / DA1A1900 write characteristic on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  if (!svc) { log('CAN probe: no Hyena / DA1A1900 service on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  let chars = [];
+  try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN probe: characteristics unreadable: ' + e, 'log-err'); return; }
+  const writeChars = chars.filter(c => { const p = c.properties || {}; return p.write || p.writeWithoutResponse; });
+  if (!writeChars.length) { log('CAN probe: no writable characteristic in the CAN service', 'log-err'); return; }
+  // We do not know which write characteristic is the CAN command channel, so send the read request to
+  // every writable one and watch which triggers a notify. Sending a read request writes nothing to config.
   const frame = hapCanFrame(HAP_EID_PARAM_READ, paramReadPayload(ADDR_MAX_SPEED, 2));
-  log('CAN probe: read speed limit (addr 496) via ' + shortUuid(writeChar.uuid) + ' on service ' + svcUuid, 'log-tx');
-  await writeRaw(writeChar, frame, 'CAN param-read 496');
-  log('CAN probe: sent - watch the RX lines on the CAN notify characteristic (response is ISO-TP, may span several frames)', 'log-tx');
+  log('CAN probe: read speed limit (addr 496), trying each write characteristic of ' + svc.uuid + ' (' + writeChars.length + ')', 'log-tx');
+  for (const c of writeChars) {
+    await writeRaw(c, frame, 'CAN read 496 -> ' + shortUuid(c.uuid));
+    await sleep(600);   // give the controller time to answer on the notify characteristic
+  }
+  log('CAN probe: done - look for an RX on a CAN notify characteristic (1903/1904). No RX means the channel answered on none of the write characteristics.', 'log-tx');
 }
 
 let lastFrame = {};
