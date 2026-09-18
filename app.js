@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v9';
+const BUILD = 'v10';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -190,6 +190,7 @@ const DECODERS = {
 let device = null, server = null;
 let tuneWriteChar = null, tuneNotifyChar = null, timeSyncChar = null;
 const notifyChars = [];
+const readChars = [];
 let connected = false, connecting = false;
 
 // iOS WebKit (Bluefy) reports UUIDs uppercase, desktop Chrome lowercase - normalize before matching.
@@ -212,6 +213,7 @@ async function pickAndConnect() {
     connected = true; connecting = false; setStatus('connected');
     updateConnButton(); setDrosselEnabled(true); updateTuneNote();
     if (!tuneWriteChar) log('MotorTuning write (DA1A160D) not present on this scooter - reading and live values work, but the limiter cannot be written here', 'log-err');
+    await readAll();     // snapshot the read-only config (incl. 1501 speed limit) right after connect
   } catch (e) {
     connecting = false; setStatus('disconnected'); updateConnButton();
     const msg = (e && e.message) ? e.message : String(e);
@@ -228,7 +230,7 @@ async function pickAndConnect() {
 
 async function enumerateGatt() {
   const out = [];
-  notifyChars.length = 0; tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; lastFrame = {};
+  notifyChars.length = 0; readChars.length = 0; tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; lastFrame = {};
   let services = [];
   try { services = await server.getPrimaryServices(); } catch (e) { log('getPrimaryServices failed: ' + e, 'log-err'); }
   for (const svc of services) {
@@ -243,6 +245,7 @@ async function enumerateGatt() {
       if (cu === TUNE_WRITE) tuneWriteChar = c;
       if (cu === TUNE_NOTIFY) tuneNotifyChar = c;
       if (cu === TIMESYNC_WRITE) timeSyncChar = c;
+      if (p.read) readChars.push(c);
       if (p.notify || p.indicate) {
         try { await c.startNotifications(); c.addEventListener('characteristicvaluechanged', onNotify); notifyChars.push(c); }
         catch (e) { out.push('    (subscribe failed: ' + e + ')'); }
@@ -257,6 +260,25 @@ async function enumerateGatt() {
 async function writeTimeSync() {
   if (!timeSyncChar) { log('handshake: TimeSync characteristic DA1A1607 not present, skipped', 'log-err'); return; }
   await writeRaw(timeSyncChar, timeSyncFrame(), '1607 TimeSync (handshake)');
+}
+
+// Read every readable characteristic once. This surfaces the read-only config that notifications never
+// push - above all DA1A1501 with the speed limit - so we can find where the limiter lives on models that
+// have no MotorTuning characteristic. Reading is safe: it never changes anything on the scooter.
+async function readAll() {
+  if (!connected) { log('not connected', 'log-err'); return; }
+  log('reading all ' + readChars.length + ' readable characteristics...', 'log-tx');
+  for (const c of readChars) {
+    const su = String(shortUuid(c.uuid)).toLowerCase();
+    try {
+      const v = await c.readValue();
+      const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+      log('RD ' + su + '  ' + bytesToHex(bytes), 'log-rx');
+      const dec = DECODERS[su];
+      if (dec) { try { dec(bytes); } catch (e) { log('  decode ' + su + ' failed: ' + e, 'log-err'); } }
+    } catch (e) { log('  read ' + su + ' failed: ' + e, 'log-err'); }
+  }
+  log('read all done', 'log-ok');
 }
 
 let lastFrame = {};
@@ -362,6 +384,7 @@ function setDrosselEnabled(on) {
   const canRead = on && !!tuneNotifyChar;    // read-tune needs the MotorTuning report characteristic (160C)
   ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) el.disabled = !canWrite; });
   const br = $('btn-readtune'); if (br) br.disabled = !canRead;
+  const ra = $('btn-readall'); if (ra) ra.disabled = !on;     // read-all works whenever connected
 }
 function updateTuneNote() {
   const el = $('tune-note'); if (!el) return;
@@ -464,6 +487,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btn-open').addEventListener('click', () => writeDrossel(true));
   $('btn-legal').addEventListener('click', () => writeDrossel(false));
   $('btn-readtune').addEventListener('click', readTune);
+  { const b = $('btn-readall'); if (b) b.addEventListener('click', readAll); }
   { const b = $('btn-copy-log'); if (b) b.addEventListener('click', copyLog); }
   { const b = $('btn-clear-log'); if (b) b.addEventListener('click', clearLog); }
   { const b = $('btn-diag'); if (b) b.addEventListener('click', scanAllDevicesDiagnostic); }
