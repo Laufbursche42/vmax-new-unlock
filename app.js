@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v17';
+const BUILD = 'v18';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -381,7 +381,6 @@ async function readAll() {
 // requests a value - it writes nothing to the scooter's configuration.
 async function probeSpeedLimit() {
   if (!connected || !server) { log('not connected', 'log-err'); return; }
-  // Locate the CAN bridge service and its characteristics.
   let svc = null;
   try {
     const services = await server.getPrimaryServices();
@@ -390,70 +389,60 @@ async function probeSpeedLimit() {
   if (!svc) { log('CAN: no Hyena / DA1A1900 service on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
   let chars = [];
   try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN: characteristics unreadable: ' + e, 'log-err'); return; }
-  const byShort = {}; chars.forEach(c => { byShort[String(shortUuid(c.uuid)).toLowerCase()] = c; });
   const props = c => (c && c.properties) || {};
-  // Control = write+notify; RX = notify-only; TX = a write char that is not the control char.
-  let control = null, rx = null, tx = null;
-  for (const c of chars) { const p = props(c); if ((p.write || p.writeWithoutResponse) && p.notify && !control) control = c; }
-  for (const c of chars) { const p = props(c); if (p.notify && c !== control && !rx) rx = c; }
-  for (const c of chars) { const p = props(c); if ((p.write || p.writeWithoutResponse) && c !== control && !tx) tx = c; }
-  control = control || byShort['1904'] || null; rx = rx || byShort['1903'] || null; tx = tx || byShort['1902'] || byShort['1901'] || null;
-  if (!control) { log('CAN: no control (write+notify) characteristic found', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
-  log('CAN: control=' + shortUuid(control.uuid) + ' rx=' + (rx ? shortUuid(rx.uuid) : '?') + ' tx=' + (tx ? shortUuid(tx.uuid) : '?'), 'log-tx');
+  const writeChars = chars.filter(c => { const p = props(c); return p.write || p.writeWithoutResponse; });
+  const notifyChars2 = chars.filter(c => { const p = props(c); return p.notify || p.indicate; });
+  if (!writeChars.length) { log('CAN: no writable characteristic in the CAN service', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  log('CAN: write=' + writeChars.map(c => shortUuid(c.uuid)).join(',') + ' notify=' + notifyChars2.map(c => shortUuid(c.uuid)).join(','), 'log-tx');
 
-  // Control-channel notifications are AES-encrypted with the fixed key. Hook a decrypting waiter.
-  const ctrlQ = []; let ctrlResolve = null;
-  const onCtrl = ev => {
+  // We do not know which characteristic carries the control channel, so listen for the decrypted reply on
+  // every notify characteristic of the service. Each incoming frame is decrypted with the fixed key.
+  let anyResolve = null; const anyQ = [];
+  const onAny = ev => {
     const dv = ev.target.value; const raw = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
     let dec = raw; try { if (raw.length && raw.length % 16 === 0) dec = pkcs7unpad(aesEcbDec(AES_FIXED_KEY, raw)); } catch (e) {}
-    log('RX ctrl ' + shortUuid(control.uuid) + '  ' + bytesToHex(dec) + '  (dec)', 'log-rx');
-    if (ctrlResolve) { const r = ctrlResolve; ctrlResolve = null; r(dec); } else ctrlQ.push(dec);
+    log('RX ' + shortUuid(ev.target.uuid) + '  ' + bytesToHex(dec) + '  (dec)', 'log-rx');
+    const item = { uuid: ev.target.uuid, dec }; if (anyResolve) { const r = anyResolve; anyResolve = null; r(item); } else anyQ.push(item);
   };
-  const waitCtrl = ms => new Promise(res => { if (ctrlQ.length) return res(ctrlQ.shift()); ctrlResolve = res; setTimeout(() => { if (ctrlResolve === res) { ctrlResolve = null; res(null); } }, ms); });
-  try { await control.startNotifications(); } catch (e) {}
-  control.addEventListener('characteristicvaluechanged', onCtrl);
+  const waitAny = ms => new Promise(res => { if (anyQ.length) return res(anyQ.shift()); anyResolve = res; setTimeout(() => { if (anyResolve === res) { anyResolve = null; res(null); } }, ms); });
+  for (const c of notifyChars2) { try { await c.startNotifications(); } catch (e) {} c.addEventListener('characteristicvaluechanged', onAny); }
 
-  let bo = 0, dyn = null;
   try {
-    // Handshake step 1: send [0x01, nonce] (encrypted with the fixed key), expect [0x02, rand4, rand6].
-    const nonce = randBytes(4);
-    log('CAN handshake: -> 0x01 nonce ' + bytesToHex(nonce), 'log-tx');
-    await writeRaw(control, genCmdEncry(0x01, nonce), 'ctrl 0x01');
-    let r = await waitCtrl(3000);
-    if (!r || r[0] !== 0x02 || r.length < 11) { log('CAN handshake: no valid 0x02 reply (' + (r ? bytesToHex(r) : 'timeout') + '). This may not be the PairLink bridge, or the control char is wrong.', 'log-err'); return; }
-    const rand4 = r.subarray(1, 5), rand6 = r.subarray(5, 11);
-    // Build the dynamic key by interleaving nonce / rand4 / rand6.
-    dyn = new Uint8Array(16);
+    // Find the control-write characteristic: send the encrypted 0x01 to each writable one until a 0x02 arrives.
+    let control = null, nonce = null, reply = null;
+    for (const wc of writeChars) {
+      while (anyQ.length) anyQ.shift();
+      nonce = randBytes(4);
+      log('CAN handshake: 0x01 -> ' + shortUuid(wc.uuid) + ' nonce ' + bytesToHex(nonce), 'log-tx');
+      await writeRaw(wc, genCmdEncry(0x01, nonce), 'ctrl 0x01 -> ' + shortUuid(wc.uuid));
+      const r = await waitAny(2500);
+      if (r && r.dec[0] === 0x02 && r.dec.length >= 11) { control = wc; reply = r.dec; log('CAN handshake: 0x02 on ' + shortUuid(r.uuid) + ' -> control = ' + shortUuid(wc.uuid), 'log-ok'); break; }
+    }
+    if (!control) { log('CAN handshake: no 0x02 from any write characteristic. DA1A1900 does not answer the PairLink/Hyena handshake - its control protocol is not in the app code we have.', 'log-err'); return; }
+
+    const rand4 = reply.subarray(1, 5), rand6 = reply.subarray(5, 11);
+    const dyn = new Uint8Array(16);
     for (let i = 0; i < 4; i++) { dyn[i*3] = nonce[i]; dyn[i*3+1] = rand4[i]; dyn[i*3+2] = rand6[i]; }
     dyn[12] = 0x55; dyn[13] = 0xAA; dyn[14] = rand6[4]; dyn[15] = rand6[5];
-    log('CAN handshake: 0x02 ok, dynamic key ' + bytesToHex(dyn), 'log-ok');
-    // Step 2: send [0x08], expect [0x09] ready.
-    await writeRaw(control, genCmdEncry(0x08, null), 'ctrl 0x08');
-    r = await waitCtrl(3000);
-    log('CAN handshake: after 0x08 got ' + (r ? bytesToHex(r) : 'timeout'), r && r[0] === 0x09 ? 'log-ok' : 'log-err');
-    // Step 3: send [0x12] (firmware > 1.7 path), expect [0x13, bo].
-    await writeRaw(control, genCmdEncry(0x12, null), 'ctrl 0x12');
-    r = await waitCtrl(3000);
-    if (r && r[0] === 0x13 && r.length >= 2) { bo = r[1]; log('CAN handshake: 0x13 bo=' + bo + ' - CAN channel open', 'log-ok'); }
-    else log('CAN handshake: expected 0x13, got ' + (r ? bytesToHex(r) : 'timeout') + '; continuing with bo=0', 'log-err');
+    log('CAN handshake: dynamic key ' + bytesToHex(dyn), 'log-ok');
+    await writeRaw(control, genCmdEncry(0x08, null), 'ctrl 0x08'); let r = await waitAny(2500);
+    log('CAN handshake: after 0x08 got ' + (r ? bytesToHex(r.dec) : 'timeout'), r && r.dec[0] === 0x09 ? 'log-ok' : 'log-err');
+    await writeRaw(control, genCmdEncry(0x12, null), 'ctrl 0x12'); r = await waitAny(2500);
+    let bo = 0; if (r && r.dec[0] === 0x13 && r.dec.length >= 2) { bo = r.dec[1]; log('CAN handshake: 0x13 bo=' + bo + ' - CAN channel open', 'log-ok'); }
+    else log('CAN handshake: expected 0x13, got ' + (r ? bytesToHex(r.dec) : 'timeout') + '; continuing with bo=0', 'log-err');
 
-    if (!tx) { log('CAN: no TX characteristic to read from', 'log-err'); return; }
-    // Decrypt RX answers when the mode says RX is encrypted (bo bit0).
-    const rxDec = ev => { const dv = ev.target.value; const raw = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength); if ((bo & 1) && raw.length % 16 === 0) { try { log('RX ' + shortUuid(rx.uuid) + '  ' + bytesToHex(pkcs7unpad(aesEcbDec(dyn, raw))) + '  (dec)', 'log-rx'); } catch (e) {} } };
-    if (rx) { try { await rx.startNotifications(); } catch (e) {} rx.addEventListener('characteristicvaluechanged', rxDec); }
-    try {
-      log('CAN: reading parameters (MaxSpeed 496, Assist 536, Throttle 600) via ' + shortUuid(tx.uuid), 'log-tx');
-      for (const pr of CAN_PARAMS) {
-        let frame = canReadFrame(pr.addr, pr.len);
-        if (bo & 2) frame = aesEcbEnc(dyn, pkcs7pad(frame));   // TX encrypted when bo bit1 set
-        await writeRaw(tx, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + (bo & 2 ? ' (enc)' : ''));
-        await sleep(800);
-      }
-      await sleep(1500);   // catch late answers
-    } finally { if (rx) rx.removeEventListener('characteristicvaluechanged', rxDec); }
-    log('CAN: done - the answer to addr 496 (RX, big-endian, /10) is the current speed limit', 'log-tx');
+    const tx = writeChars.find(c => c !== control) || control;
+    log('CAN: reading MaxSpeed 496 / Assist 536 / Throttle 600 via ' + shortUuid(tx.uuid), 'log-tx');
+    for (const pr of CAN_PARAMS) {
+      let frame = canReadFrame(pr.addr, pr.len);
+      if (bo & 2) frame = aesEcbEnc(dyn, pkcs7pad(frame));
+      await writeRaw(tx, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + (bo & 2 ? ' (enc)' : ''));
+      await sleep(900);
+    }
+    await sleep(1500);
+    log('CAN: done - the answer to addr 496 (big-endian /10) is the current speed limit', 'log-tx');
   } finally {
-    control.removeEventListener('characteristicvaluechanged', onCtrl);
+    for (const c of notifyChars2) c.removeEventListener('characteristicvaluechanged', onAny);
   }
 }
 
