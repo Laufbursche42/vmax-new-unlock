@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v18';
+const BUILD = 'v19';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -418,29 +418,35 @@ async function probeSpeedLimit() {
       const r = await waitAny(2500);
       if (r && r.dec[0] === 0x02 && r.dec.length >= 11) { control = wc; reply = r.dec; log('CAN handshake: 0x02 on ' + shortUuid(r.uuid) + ' -> control = ' + shortUuid(wc.uuid), 'log-ok'); break; }
     }
-    if (!control) { log('CAN handshake: no 0x02 from any write characteristic. DA1A1900 does not answer the PairLink/Hyena handshake - its control protocol is not in the app code we have.', 'log-err'); return; }
-
-    const rand4 = reply.subarray(1, 5), rand6 = reply.subarray(5, 11);
-    const dyn = new Uint8Array(16);
-    for (let i = 0; i < 4; i++) { dyn[i*3] = nonce[i]; dyn[i*3+1] = rand4[i]; dyn[i*3+2] = rand6[i]; }
-    dyn[12] = 0x55; dyn[13] = 0xAA; dyn[14] = rand6[4]; dyn[15] = rand6[5];
-    log('CAN handshake: dynamic key ' + bytesToHex(dyn), 'log-ok');
-    await writeRaw(control, genCmdEncry(0x08, null), 'ctrl 0x08'); let r = await waitAny(2500);
-    log('CAN handshake: after 0x08 got ' + (r ? bytesToHex(r.dec) : 'timeout'), r && r.dec[0] === 0x09 ? 'log-ok' : 'log-err');
-    await writeRaw(control, genCmdEncry(0x12, null), 'ctrl 0x12'); r = await waitAny(2500);
-    let bo = 0; if (r && r.dec[0] === 0x13 && r.dec.length >= 2) { bo = r.dec[1]; log('CAN handshake: 0x13 bo=' + bo + ' - CAN channel open', 'log-ok'); }
-    else log('CAN handshake: expected 0x13, got ' + (r ? bytesToHex(r.dec) : 'timeout') + '; continuing with bo=0', 'log-err');
-
-    const tx = writeChars.find(c => c !== control) || control;
-    log('CAN: reading MaxSpeed 496 / Assist 536 / Throttle 600 via ' + shortUuid(tx.uuid), 'log-tx');
-    for (const pr of CAN_PARAMS) {
-      let frame = canReadFrame(pr.addr, pr.len);
-      if (bo & 2) frame = aesEcbEnc(dyn, pkcs7pad(frame));
-      await writeRaw(tx, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + (bo & 2 ? ' (enc)' : ''));
-      await sleep(900);
+    if (!control) {
+      log('CAN handshake: no 0x02 from any write characteristic - DA1A1900 does not answer the handshake we have.', 'log-err');
+    } else {
+      const rand4 = reply.subarray(1, 5), rand6 = reply.subarray(5, 11);
+      const dyn = new Uint8Array(16);
+      for (let i = 0; i < 4; i++) { dyn[i*3] = nonce[i]; dyn[i*3+1] = rand4[i]; dyn[i*3+2] = rand6[i]; }
+      dyn[12] = 0x55; dyn[13] = 0xAA; dyn[14] = rand6[4]; dyn[15] = rand6[5];
+      log('CAN handshake: dynamic key ' + bytesToHex(dyn), 'log-ok');
+      await writeRaw(control, genCmdEncry(0x08, null), 'ctrl 0x08'); let r = await waitAny(2500);
+      log('CAN handshake: after 0x08 got ' + (r ? bytesToHex(r.dec) : 'timeout'), r && r.dec[0] === 0x09 ? 'log-ok' : 'log-err');
+      await writeRaw(control, genCmdEncry(0x12, null), 'ctrl 0x12'); r = await waitAny(2500);
+      let bo = 0; if (r && r.dec[0] === 0x13 && r.dec.length >= 2) { bo = r.dec[1]; log('CAN handshake: 0x13 bo=' + bo + ' - CAN channel open', 'log-ok'); }
+      else log('CAN handshake: expected 0x13, got ' + (r ? bytesToHex(r.dec) : 'timeout') + '; continuing with bo=0', 'log-err');
+      const tx = writeChars.find(c => c !== control) || control;
+      log('CAN: reading MaxSpeed 496 / Assist 536 / Throttle 600 via ' + shortUuid(tx.uuid), 'log-tx');
+      for (const pr of CAN_PARAMS) {
+        let frame = canReadFrame(pr.addr, pr.len);
+        if (bo & 2) frame = aesEcbEnc(dyn, pkcs7pad(frame));
+        await writeRaw(tx, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + (bo & 2 ? ' (enc)' : ''));
+        await sleep(900);
+      }
+      await sleep(1500);
     }
-    await sleep(1500);
-    log('CAN: done - the answer to addr 496 (big-endian /10) is the current speed limit', 'log-tx');
+    // Maximum yield per run: re-read every readable characteristic (catch any change the writes cause) and
+    // keep listening on all notify characteristics a few seconds for any late or asynchronous answer.
+    log('CAN: re-reading all readable characteristics and listening 5s for any late traffic', 'log-tx');
+    await readAll();
+    await sleep(5000);
+    log('CAN: full sweep done', 'log-ok');
   } finally {
     for (const c of notifyChars2) c.removeEventListener('characteristicvaluechanged', onAny);
   }
