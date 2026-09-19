@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v19';
+const BUILD = 'v20';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -112,7 +112,9 @@ const TIMESYNC_WRITE = u('1607');     // handshake: WriteTimeSync sends 6 time b
 // Hylink "Hyena Drive" CAN-over-BLE control service (SDK UUID). On the real VMAX it is very likely
 // remapped into DA1A1900 - add both plus the serial bridge DA1A1700 so the channel can be reached.
 const HYENA_SERVICE = '48592800-6879-656e-6174-656b2e485550';
-const OPTIONAL_SERVICES = ['1500', '1600', '1700', '1800', '1900', '1a00', '1c00', '1e00', '1f00'].map(u).concat([HYENA_SERVICE]);
+const PAIRLINK_SERVICE = '49d554a6-76b1-11e9-8f9e-2a86e4085a59';   // PairLink BLE-CAN bridge service (fully described in the app code)
+const PAIRLINK_UART = '0000fff0-0000-1000-8000-00805f9b34fb';       // PairLink UART transport variant
+const OPTIONAL_SERVICES = ['1500', '1600', '1700', '1800', '1900', '1a00', '1c00', '1e00', '1f00'].map(u).concat([HYENA_SERVICE, PAIRLINK_SERVICE, PAIRLINK_UART]);
 
 // ---- Hylink HAP v2 (CAN over BLE) ------------------------------------------
 // A packet is [EID 4B big-endian][DLC 1B][payload <=8B] in a 13-byte slot. Controller message IDs are
@@ -384,9 +386,13 @@ async function probeSpeedLimit() {
   let svc = null;
   try {
     const services = await server.getPrimaryServices();
-    for (const s of services) { const su = String(s.uuid).toLowerCase(); if (su === HYENA_SERVICE || /^da1a1900-/.test(su)) { svc = s; break; } }
+    log('CAN: services on device: ' + services.map(s => s.uuid).join(', '), 'log-tx');
+    let pl = null, hy = null, da = null;
+    for (const s of services) { const su = String(s.uuid).toLowerCase(); if (su === PAIRLINK_SERVICE) pl = s; else if (su === HYENA_SERVICE) hy = s; else if (/^da1a1900-/.test(su)) da = s; }
+    svc = pl || hy || da;   // prefer the code-documented PairLink service over the guessed DA1A1900
   } catch (e) { log('CAN: service scan failed: ' + e, 'log-err'); return; }
-  if (!svc) { log('CAN: no Hyena / DA1A1900 service on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  if (!svc) { log('CAN: no CAN bridge service found (PairLink 49d554a6 / Hyena 48592800 / DA1A1900)', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  log('CAN: using service ' + svc.uuid, 'log-ok');
   let chars = [];
   try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN: characteristics unreadable: ' + e, 'log-err'); return; }
   const props = c => (c && c.properties) || {};
@@ -443,9 +449,23 @@ async function probeSpeedLimit() {
     }
     // Maximum yield per run: re-read every readable characteristic (catch any change the writes cause) and
     // keep listening on all notify characteristics a few seconds for any late or asynchronous answer.
-    log('CAN: re-reading all readable characteristics and listening 5s for any late traffic', 'log-tx');
+    log('CAN: re-reading all readable characteristics and dumping the DA1A1802 firmware-info fields', 'log-tx');
     await readAll();
-    await sleep(5000);
+    // DA1A1802 rotates through firmware-info fields on each read (01 model, 02 firmware version, ...).
+    // Iterate it to dump every field - one of them may carry the module id the firmware API needs.
+    const fwInfo = readChars.find(c => String(shortUuid(c.uuid)).toLowerCase() === '1802');
+    if (fwInfo) {
+      log('CAN: iterating DA1A1802 (rotating fields - model, firmware, maybe a module id)', 'log-tx');
+      for (let k = 0; k < 12; k++) {
+        try {
+          const v = await fwInfo.readValue(); const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+          let asc = ''; for (const ch of b) asc += (ch >= 32 && ch < 127) ? String.fromCharCode(ch) : '.';
+          log('  1802[' + k + '] ' + bytesToHex(b) + '  "' + asc + '"', 'log-rx');
+        } catch (e) { log('  1802 read failed: ' + e, 'log-err'); break; }
+        await sleep(250);
+      }
+    }
+    await sleep(3000);   // listen a bit more for any late traffic on any notify characteristic
     log('CAN: full sweep done', 'log-ok');
   } finally {
     for (const c of notifyChars2) c.removeEventListener('characteristicvaluechanged', onAny);
