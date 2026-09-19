@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v20';
+const BUILD = 'v21';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -132,11 +132,31 @@ function hapCanFrame(eid, payload) {
 function paramReadPayload(addr, len) {
   return new Uint8Array([0x10, addr & 0xff, (addr >> 8) & 0xff, (addr >> 16) & 0xff, len & 0xff, (len >> 8) & 0xff]);
 }
-// Known controller parameters (from the HAP v2 reconstruction) to read during the probe.
+// Controller parameters to read once the CAN channel answers - every known address from the reconstructed
+// map (Gesamtanalyse 6.6). The named ones are identified; the rest are read to learn their meaning from the
+// returned value (e.g. address 28 likely a serial string). Length is the controller-side field length.
 const CAN_PARAMS = [
   { addr: 496, len: 2, name: 'MaxSpeed deci-km/h' },
-  { addr: 536, len: 1, name: 'AssistLevelState' },
+  { addr: 267, len: 2, name: 'SpeedTable[0]a' },
+  { addr: 269, len: 2, name: 'SpeedTable[0]b' },
+  { addr: 536, len: 9, name: 'AssistLevels' },
+  { addr: 621, len: 1, name: 'AssistValue[1]' },
+  { addr: 743, len: 1, name: 'PedalResponse[1]' },
   { addr: 600, len: 1, name: 'ThrottleEnabled' },
+  { addr: 217, len: 22, name: 'BatteryCellInfo' },
+  { addr: 8, len: 8, name: 'addr8 (unknown)' },
+  { addr: 24, len: 2, name: 'addr24 (unknown)' },
+  { addr: 26, len: 2, name: 'addr26 (unknown)' },
+  { addr: 28, len: 24, name: 'addr28 (serial?)' },
+  { addr: 249, len: 2, name: 'addr249 (unknown)' },
+  { addr: 251, len: 2, name: 'addr251 (unknown)' },
+  { addr: 256, len: 4, name: 'addr256 (unknown)' },
+  { addr: 426, len: 1, name: 'addr426 (unknown)' },
+  { addr: 456, len: 4, name: 'addr456 (unknown)' },
+  { addr: 598, len: 1, name: 'addr598 (unknown)' },
+  { addr: 618, len: 37, name: 'addr618 (table)' },
+  { addr: 768, len: 2, name: 'addr768 (unknown)' },
+  { addr: 770, len: 2, name: 'addr770 (unknown)' },
 ];
 // PairLink CAN-bridge control commands (written to the filter characteristic, not the controller). The
 // bridge forwards nothing until it is enabled - that is why plain reads got no answer. Replicate the
