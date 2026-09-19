@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v16';
+const BUILD = 'v17';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -142,6 +142,67 @@ const CAN_PARAMS = [
 const CAN_NOISE_IDS = [0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7b0, 0x7b1, 0x7b2, 0x7b3];
 function canBlacklistFrame(id) { return new Uint8Array([0xAA, (id >>> 24) & 0xff, (id >>> 16) & 0xff, (id >>> 8) & 0xff, id & 0xff]); }
 const CAN_ENABLE_FRAME = new Uint8Array([0xAC, 0x00, 0x00, 0x00, 0x00]);
+
+// ---- AES-128-ECB (for the PairLink CAN-bridge control handshake) -----------
+// The bridge only forwards CAN after an AES-encrypted control handshake. Crypto is AES-128-ECB, PKCS#7.
+// The fixed control key is hardcoded in the app's native lib (JNI_OnLoad -> aes_set_key): "bafangOTAcontrol".
+// This implementation is byte-verified against Node's crypto aes-128-ecb (encrypt and decrypt).
+const AES_FIXED_KEY = new Uint8Array([0x62,0x61,0x66,0x61,0x6e,0x67,0x4f,0x54,0x41,0x63,0x6f,0x6e,0x74,0x72,0x6f,0x6c]);
+const AES_SBOX = (function () {
+  const g = new Uint8Array(256), lg = new Uint8Array(256); let a = 1;
+  for (let i = 0; i < 255; i++) { g[i] = a; lg[a] = i; a ^= (a << 1) ^ ((a & 0x80) ? 0x11b : 0); a &= 0xff; }
+  const ginv = (b) => b === 0 ? 0 : g[(255 - lg[b]) % 255];
+  const s = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) { let v = ginv(i), y = v; for (let c = 0; c < 4; c++) { y = ((y << 1) | (y >> 7)) & 0xff; v ^= y; } s[i] = (v ^ 0x63) & 0xff; }
+  return s;
+})();
+const AES_INV_SBOX = (function () { const inv = new Uint8Array(256); for (let i = 0; i < 256; i++) inv[AES_SBOX[i]] = i; return inv; })();
+const AES_RCON = [0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36];
+function aesKeyExpansion(key) {
+  const w = new Uint8Array(176); w.set(key.subarray(0, 16)); let rc = 0;
+  for (let i = 16; i < 176; i += 4) {
+    let t0 = w[i-4], t1 = w[i-3], t2 = w[i-2], t3 = w[i-1];
+    if (i % 16 === 0) { const t = t0; t0 = AES_SBOX[t1]; t1 = AES_SBOX[t2]; t2 = AES_SBOX[t3]; t3 = AES_SBOX[t]; t0 ^= AES_RCON[rc++]; }
+    w[i] = w[i-16] ^ t0; w[i+1] = w[i-15] ^ t1; w[i+2] = w[i-14] ^ t2; w[i+3] = w[i-13] ^ t3;
+  }
+  return w;
+}
+function aesMul(a, b) { let r = 0; for (let i = 0; i < 8; i++) { if (b & 1) r ^= a; const hi = a & 0x80; a = (a << 1) & 0xff; if (hi) a ^= 0x1b; b >>= 1; } return r & 0xff; }
+function aesEncBlock(inb, w) {
+  const s = Uint8Array.from(inb.subarray(0, 16)); let t;
+  for (let i = 0; i < 16; i++) s[i] ^= w[i];
+  for (let round = 1; round <= 10; round++) {
+    for (let i = 0; i < 16; i++) s[i] = AES_SBOX[s[i]];
+    t = s[1]; s[1] = s[5]; s[5] = s[9]; s[9] = s[13]; s[13] = t;
+    t = s[2]; s[2] = s[10]; s[10] = t; t = s[6]; s[6] = s[14]; s[14] = t;
+    t = s[15]; s[15] = s[11]; s[11] = s[7]; s[7] = s[3]; s[3] = t;
+    if (round < 10) for (let c = 0; c < 4; c++) { const o = c*4, a0 = s[o], a1 = s[o+1], a2 = s[o+2], a3 = s[o+3]; s[o] = aesMul(a0,2)^aesMul(a1,3)^a2^a3; s[o+1] = a0^aesMul(a1,2)^aesMul(a2,3)^a3; s[o+2] = a0^a1^aesMul(a2,2)^aesMul(a3,3); s[o+3] = aesMul(a0,3)^a1^a2^aesMul(a3,2); }
+    for (let i = 0; i < 16; i++) s[i] ^= w[round*16 + i];
+  }
+  return s;
+}
+function aesDecBlock(inb, w) {
+  const s = Uint8Array.from(inb.subarray(0, 16)); let t;
+  for (let i = 0; i < 16; i++) s[i] ^= w[160 + i];
+  for (let round = 9; round >= 0; round--) {
+    t = s[13]; s[13] = s[9]; s[9] = s[5]; s[5] = s[1]; s[1] = t;
+    t = s[2]; s[2] = s[10]; s[10] = t; t = s[6]; s[6] = s[14]; s[14] = t;
+    t = s[3]; s[3] = s[7]; s[7] = s[11]; s[11] = s[15]; s[15] = t;
+    for (let i = 0; i < 16; i++) s[i] = AES_INV_SBOX[s[i]];
+    for (let i = 0; i < 16; i++) s[i] ^= w[round*16 + i];
+    if (round > 0) for (let c = 0; c < 4; c++) { const o = c*4, a0 = s[o], a1 = s[o+1], a2 = s[o+2], a3 = s[o+3]; s[o] = aesMul(a0,14)^aesMul(a1,11)^aesMul(a2,13)^aesMul(a3,9); s[o+1] = aesMul(a0,9)^aesMul(a1,14)^aesMul(a2,11)^aesMul(a3,13); s[o+2] = aesMul(a0,13)^aesMul(a1,9)^aesMul(a2,14)^aesMul(a3,11); s[o+3] = aesMul(a0,11)^aesMul(a1,13)^aesMul(a2,9)^aesMul(a3,14); }
+  }
+  return s;
+}
+function aesEcbEnc(key, data) { const w = aesKeyExpansion(key); const out = new Uint8Array(data.length); for (let o = 0; o < data.length; o += 16) out.set(aesEncBlock(data.subarray(o, o+16), w), o); return out; }
+function aesEcbDec(key, data) { const w = aesKeyExpansion(key); const out = new Uint8Array(data.length); for (let o = 0; o < data.length; o += 16) out.set(aesDecBlock(data.subarray(o, o+16), w), o); return out; }
+function pkcs7pad(d) { const p = 16 - (d.length % 16); const o = new Uint8Array(d.length + p); o.set(d); o.fill(p, d.length); return o; }
+function pkcs7unpad(d) { if (!d.length) return d; const p = d[d.length - 1]; return (p > 0 && p <= 16 && p <= d.length) ? d.subarray(0, d.length - p) : d; }
+// gen_cmd_encry: [opcode, ...payload] -> PKCS#7 -> AES-128-ECB with the fixed control key
+function genCmdEncry(opcode, payload) { const body = new Uint8Array(1 + (payload ? payload.length : 0)); body[0] = opcode & 0xff; if (payload) body.set(payload, 1); return aesEcbEnc(AES_FIXED_KEY, pkcs7pad(body)); }
+function randBytes(n) { const a = new Uint8Array(n); try { (self.crypto || window.crypto).getRandomValues(a); } catch (e) { for (let i = 0; i < n; i++) a[i] = (Date.now() + i * 97) & 0xff; } return a; }
+// CAN frame for a parameter read: [EID 4B big-endian][DLC 1B][payload] (no trailing padding)
+function canReadFrame(addr, len) { const pl = paramReadPayload(addr, len); const f = new Uint8Array(5 + pl.length); f[0] = (HAP_EID_PARAM_READ >>> 24) & 0xff; f[1] = (HAP_EID_PARAM_READ >>> 16) & 0xff; f[2] = (HAP_EID_PARAM_READ >>> 8) & 0xff; f[3] = HAP_EID_PARAM_READ & 0xff; f[4] = pl.length & 0xff; f.set(pl, 5); return f; }
 
 // MotorTuningValueType (ordinal) from the SDK
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
@@ -320,36 +381,80 @@ async function readAll() {
 // requests a value - it writes nothing to the scooter's configuration.
 async function probeSpeedLimit() {
   if (!connected || !server) { log('not connected', 'log-err'); return; }
+  // Locate the CAN bridge service and its characteristics.
   let svc = null;
   try {
     const services = await server.getPrimaryServices();
     for (const s of services) { const su = String(s.uuid).toLowerCase(); if (su === HYENA_SERVICE || /^da1a1900-/.test(su)) { svc = s; break; } }
-  } catch (e) { log('CAN probe: service scan failed: ' + e, 'log-err'); return; }
-  if (!svc) { log('CAN probe: no Hyena / DA1A1900 service on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  } catch (e) { log('CAN: service scan failed: ' + e, 'log-err'); return; }
+  if (!svc) { log('CAN: no Hyena / DA1A1900 service on this device', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
   let chars = [];
-  try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN probe: characteristics unreadable: ' + e, 'log-err'); return; }
-  const writeChars = chars.filter(c => { const p = c.properties || {}; return p.write || p.writeWithoutResponse; });
-  if (!writeChars.length) { log('CAN probe: no writable characteristic in the CAN service', 'log-err'); return; }
-  // Step 1 - start the CAN bridge the Hyena way: ENABLE first, then blacklist the noise IDs (this order
-  // is what the app uses). We do not know which write characteristic is the filter channel, so send the
-  // init to each; the right one acts. If the bridge is the PairLink variant instead, it will stay silent
-  // and answer a write on 1904 with a ~16 byte encrypted block - that is the crypto handshake we cannot do.
-  log('CAN probe: starting the CAN bridge (enable, then blacklist) on ' + writeChars.length + ' write characteristics of ' + svc.uuid, 'log-tx');
-  for (const c of writeChars) {
-    await writeRaw(c, CAN_ENABLE_FRAME, 'CAN enable -> ' + shortUuid(c.uuid)); await sleep(200);
-    for (const id of CAN_NOISE_IDS) { await writeRaw(c, canBlacklistFrame(id), 'CAN blacklist 0x' + id.toString(16) + ' -> ' + shortUuid(c.uuid)); await sleep(100); }
-    await sleep(300);
+  try { chars = await svc.getCharacteristics(); } catch (e) { log('CAN: characteristics unreadable: ' + e, 'log-err'); return; }
+  const byShort = {}; chars.forEach(c => { byShort[String(shortUuid(c.uuid)).toLowerCase()] = c; });
+  const props = c => (c && c.properties) || {};
+  // Control = write+notify; RX = notify-only; TX = a write char that is not the control char.
+  let control = null, rx = null, tx = null;
+  for (const c of chars) { const p = props(c); if ((p.write || p.writeWithoutResponse) && p.notify && !control) control = c; }
+  for (const c of chars) { const p = props(c); if (p.notify && c !== control && !rx) rx = c; }
+  for (const c of chars) { const p = props(c); if ((p.write || p.writeWithoutResponse) && c !== control && !tx) tx = c; }
+  control = control || byShort['1904'] || null; rx = rx || byShort['1903'] || null; tx = tx || byShort['1902'] || byShort['1901'] || null;
+  if (!control) { log('CAN: no control (write+notify) characteristic found', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
+  log('CAN: control=' + shortUuid(control.uuid) + ' rx=' + (rx ? shortUuid(rx.uuid) : '?') + ' tx=' + (tx ? shortUuid(tx.uuid) : '?'), 'log-tx');
+
+  // Control-channel notifications are AES-encrypted with the fixed key. Hook a decrypting waiter.
+  const ctrlQ = []; let ctrlResolve = null;
+  const onCtrl = ev => {
+    const dv = ev.target.value; const raw = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    let dec = raw; try { if (raw.length && raw.length % 16 === 0) dec = pkcs7unpad(aesEcbDec(AES_FIXED_KEY, raw)); } catch (e) {}
+    log('RX ctrl ' + shortUuid(control.uuid) + '  ' + bytesToHex(dec) + '  (dec)', 'log-rx');
+    if (ctrlResolve) { const r = ctrlResolve; ctrlResolve = null; r(dec); } else ctrlQ.push(dec);
+  };
+  const waitCtrl = ms => new Promise(res => { if (ctrlQ.length) return res(ctrlQ.shift()); ctrlResolve = res; setTimeout(() => { if (ctrlResolve === res) { ctrlResolve = null; res(null); } }, ms); });
+  try { await control.startNotifications(); } catch (e) {}
+  control.addEventListener('characteristicvaluechanged', onCtrl);
+
+  let bo = 0, dyn = null;
+  try {
+    // Handshake step 1: send [0x01, nonce] (encrypted with the fixed key), expect [0x02, rand4, rand6].
+    const nonce = randBytes(4);
+    log('CAN handshake: -> 0x01 nonce ' + bytesToHex(nonce), 'log-tx');
+    await writeRaw(control, genCmdEncry(0x01, nonce), 'ctrl 0x01');
+    let r = await waitCtrl(3000);
+    if (!r || r[0] !== 0x02 || r.length < 11) { log('CAN handshake: no valid 0x02 reply (' + (r ? bytesToHex(r) : 'timeout') + '). This may not be the PairLink bridge, or the control char is wrong.', 'log-err'); return; }
+    const rand4 = r.subarray(1, 5), rand6 = r.subarray(5, 11);
+    // Build the dynamic key by interleaving nonce / rand4 / rand6.
+    dyn = new Uint8Array(16);
+    for (let i = 0; i < 4; i++) { dyn[i*3] = nonce[i]; dyn[i*3+1] = rand4[i]; dyn[i*3+2] = rand6[i]; }
+    dyn[12] = 0x55; dyn[13] = 0xAA; dyn[14] = rand6[4]; dyn[15] = rand6[5];
+    log('CAN handshake: 0x02 ok, dynamic key ' + bytesToHex(dyn), 'log-ok');
+    // Step 2: send [0x08], expect [0x09] ready.
+    await writeRaw(control, genCmdEncry(0x08, null), 'ctrl 0x08');
+    r = await waitCtrl(3000);
+    log('CAN handshake: after 0x08 got ' + (r ? bytesToHex(r) : 'timeout'), r && r[0] === 0x09 ? 'log-ok' : 'log-err');
+    // Step 3: send [0x12] (firmware > 1.7 path), expect [0x13, bo].
+    await writeRaw(control, genCmdEncry(0x12, null), 'ctrl 0x12');
+    r = await waitCtrl(3000);
+    if (r && r[0] === 0x13 && r.length >= 2) { bo = r[1]; log('CAN handshake: 0x13 bo=' + bo + ' - CAN channel open', 'log-ok'); }
+    else log('CAN handshake: expected 0x13, got ' + (r ? bytesToHex(r) : 'timeout') + '; continuing with bo=0', 'log-err');
+
+    if (!tx) { log('CAN: no TX characteristic to read from', 'log-err'); return; }
+    // Decrypt RX answers when the mode says RX is encrypted (bo bit0).
+    const rxDec = ev => { const dv = ev.target.value; const raw = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength); if ((bo & 1) && raw.length % 16 === 0) { try { log('RX ' + shortUuid(rx.uuid) + '  ' + bytesToHex(pkcs7unpad(aesEcbDec(dyn, raw))) + '  (dec)', 'log-rx'); } catch (e) {} } };
+    if (rx) { try { await rx.startNotifications(); } catch (e) {} rx.addEventListener('characteristicvaluechanged', rxDec); }
+    try {
+      log('CAN: reading parameters (MaxSpeed 496, Assist 536, Throttle 600) via ' + shortUuid(tx.uuid), 'log-tx');
+      for (const pr of CAN_PARAMS) {
+        let frame = canReadFrame(pr.addr, pr.len);
+        if (bo & 2) frame = aesEcbEnc(dyn, pkcs7pad(frame));   // TX encrypted when bo bit1 set
+        await writeRaw(tx, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + (bo & 2 ? ' (enc)' : ''));
+        await sleep(800);
+      }
+      await sleep(1500);   // catch late answers
+    } finally { if (rx) rx.removeEventListener('characteristicvaluechanged', rxDec); }
+    log('CAN: done - the answer to addr 496 (RX, big-endian, /10) is the current speed limit', 'log-tx');
+  } finally {
+    control.removeEventListener('characteristicvaluechanged', onCtrl);
   }
-  // Step 2 - read the known controller parameters. Answers arrive on the CAN notify (1903/1904).
-  log('CAN probe: reading parameters (MaxSpeed 496, Assist 536, Throttle 600)', 'log-tx');
-  for (const c of writeChars) {
-    for (const pr of CAN_PARAMS) {
-      const frame = hapCanFrame(HAP_EID_PARAM_READ, paramReadPayload(pr.addr, pr.len));
-      await writeRaw(c, frame, 'CAN read addr ' + pr.addr + ' ' + pr.name + ' -> ' + shortUuid(c.uuid));
-      await sleep(500);   // give the controller time to answer on the notify characteristic
-    }
-  }
-  log('CAN probe: done - after enable you should see RX (CAN frames) on the notify. The response to addr 496 is the speed limit.', 'log-tx');
 }
 
 let lastFrame = {};
