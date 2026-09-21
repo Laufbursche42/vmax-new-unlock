@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v22';
+const BUILD = 'v23';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -691,58 +691,58 @@ async function scanAllDevicesDiagnostic() {
   } catch (e) { log('scan failed: ' + e, 'log-err'); }
 }
 
-// ---- Firmware account login and download (vendor cloud) --------------------
-// Optional feature, independent of Bluetooth. It talks to the vendor host vmax.gpstuner.com, the same
-// backend the official VMAX app uses, to get an account token and pull the scooter firmware. The
-// account email and password and the device identifiers go there over HTTPS and nowhere else; nothing
-// reaches the developer. It runs only when the user fills the form and taps the buttons. See PRIVACY.
-const FW_BASE = 'https://vmax.gpstuner.com';
-let FW_TOKEN = null;
-function fwOut(s) { const el = $('fw-out'); if (el) { el.textContent += s + '\n'; el.scrollTop = el.scrollHeight; } }
-function fwFindToken(o) {
-  if (o == null) return null;
-  if (typeof o === 'object') { for (const k in o) { if (/access[_-]?token|token$/i.test(k) && typeof o[k] === 'string' && o[k].length > 8) return o[k]; const r = fwFindToken(o[k]); if (r) return r; } }
-  return null;
+// ---- Firmware fetch (vendor cloud, optional and experimental) --------------
+// Independent of Bluetooth. It talks only to the vendor host api.gpstuner.com, the same backend the
+// official app's firmware code uses. There is no login here: to try it you paste your own access token
+// and your device uuid; both go to that host over HTTPS and nowhere else, nothing reaches the developer.
+// It runs only when you fill the fields and tap a button. The vendor removed the endpoint the current
+// official app calls, and the still-live endpoint only answers for a uuid its registry knows, so this
+// usually returns "Invalid uuid". See PRIVACY.
+const FW_BASE = 'https://api.gpstuner.com';
+// Mask the pasted access token before it is shown or copied, so a pasted firmware log is safe to share:
+// token-like fields are redacted, and the literal token value from the input field is redacted too.
+function fwMask(s) {
+  s = String(s).replace(/("(?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|jwt|bearer)"\s*:\s*")[^"]{6,}(")/gi, '$1***$2');
+  let tok = ''; try { tok = ($('fw-token') && $('fw-token').value) || ''; } catch (e) {}
+  if (tok && tok.length > 8) s = s.split(tok).join('***TOKEN***');
+  return s;
 }
-async function fwReq(method, path, fields, useToken) {
-  let url = FW_BASE + path;
-  if (useToken && FW_TOKEN) url += (path.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(FW_TOKEN);
-  const opt = { method };
+function fwOut(s) { const el = $('fw-out'); if (el) { el.textContent += fwMask(s) + '\n'; el.scrollTop = el.scrollHeight; } }
+function fwCopy() {
+  const el = $('fw-out'); const text = el ? el.textContent : '';   // already masked on the way in
+  const done = () => fwOut(t('fwCopied'));
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => { copyFallback(text); done(); });
+  else { copyFallback(text); done(); }
+}
+// One request to the firmware host. The token, when present, goes as a Bearer header, exactly like the app.
+async function fwReq(method, path, fields) {
+  const tok = ($('fw-token').value || '').trim();
+  const opt = { method, headers: { 'Accept': 'application/vnd.gpstapi.v2+xml' } };
+  if (tok) opt.headers['Authorization'] = 'Bearer ' + tok;
   if (fields) { const fd = new FormData(); for (const p of fields) if (p[1] !== '') fd.append(p[0], p[1]); opt.body = fd; }
   fwOut('> ' + method + ' ' + path); log('FW ' + method + ' ' + path);   // log the path only, never the token
   try {
-    const res = await fetch(url, opt);
+    const res = await fetch(FW_BASE + path, opt);
     const text = await res.text();
     fwOut('  <- HTTP ' + res.status + ' (' + text.length + ' bytes)');
     return { status: res.status, text: text };
   } catch (e) { fwOut('  network error: ' + e.message + ' (CSP, CORS or offline)'); return { status: 0, text: '' }; }
 }
-function fwSetEnabled(on) { ['fw-profile', 'fw-check', 'fw-download'].forEach(id => { const b = $(id); if (b) b.disabled = !on; }); }
-async function fwLogin() {
-  FW_TOKEN = null; fwSetEnabled(false);
-  const email = ($('fw-email').value || '').trim(), pass = $('fw-pass').value || '';
-  if (!email || !pass) { $('fw-loginstate').textContent = t('fwNeedCreds'); return; }
-  const r = await fwReq('POST', '/api/login', [['email', email], ['password', pass]], false);
-  fwOut(r.text.slice(0, 1500));
-  let tok = null; try { tok = fwFindToken(JSON.parse(r.text)); } catch (e) {}
-  if (tok) { FW_TOKEN = tok; $('fw-loginstate').textContent = t('fwLoginOk'); fwSetEnabled(true); }
-  else { $('fw-loginstate').textContent = t('fwLoginNoToken'); }
-}
-async function fwProfile() { const r = await fwReq('GET', '/api/profile', null, true); fwOut(r.text.slice(0, 3000)); }
 function fwDeviceFields() {
   const cur = ($('fw-cur').value || '').trim();
   return [['manufacturer', 'vmax'], ['model', ($('fw-model').value || '').trim()], ['controller', ($('fw-ctrl').value || '').trim()],
-          ['serial', ($('fw-serial').value || '').trim()], ['version', cur], ['gpst_fw_mcu', cur]];
+          ['serial', ($('fw-serial').value || '').trim()], ['uuid', ($('fw-uuid').value || '').trim()],
+          ['version', cur], ['gpst_fw_mcu', cur]];
 }
-async function fwCheck() { const r = await fwReq('POST', '/api/device/updates', fwDeviceFields(), true); fwOut(r.text.slice(0, 3000)); }
+async function fwCheck() { const r = await fwReq('POST', '/api/device/update', fwDeviceFields()); fwOut(r.text.slice(0, 3000)); }
 async function fwDownload() {
-  const r = await fwReq('POST', '/api/device/update', fwDeviceFields(), true);
+  const r = await fwReq('POST', '/api/device/update', fwDeviceFields());
   fwOut(r.text.slice(0, 2000));
   const body = r.text.trim();
   const m = body.match(/https?:\/\/[^\s"'<>]+\.(?:zip|bin|hex|ota|elf)/i);
   if (m) { fwOut('  firmware URL in response -> opening: ' + m[0]); window.open(m[0], '_blank'); }
   else if (r.status === 200 && body.length > 64 && !/^[<{[]/.test(body)) { fwSaveBlob(r.text); }
-  else { fwOut('  no firmware file/URL recognised - send the raw response back so we can adjust the fields'); }
+  else { fwOut('  no firmware file/URL recognised - if the response is not an error, send it back so we can adjust the fields'); }
 }
 function fwSaveBlob(text) {
   try {
@@ -771,10 +771,9 @@ window.addEventListener('DOMContentLoaded', () => {
   { const b = $('btn-copy-log'); if (b) b.addEventListener('click', copyLog); }
   { const b = $('btn-clear-log'); if (b) b.addEventListener('click', clearLog); }
   { const b = $('btn-diag'); if (b) b.addEventListener('click', scanAllDevicesDiagnostic); }
-  { const b = $('fw-login'); if (b) b.addEventListener('click', fwLogin); }
-  { const b = $('fw-profile'); if (b) b.addEventListener('click', fwProfile); }
   { const b = $('fw-check'); if (b) b.addEventListener('click', fwCheck); }
   { const b = $('fw-download'); if (b) b.addEventListener('click', fwDownload); }
+  { const b = $('fw-copy'); if (b) b.addEventListener('click', fwCopy); }
 
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });

@@ -61,34 +61,41 @@ Die Karte **Protokoll** zeigt jeden gesendeten und empfangenen Frame als Hex. Mi
 gibst du den Mitschnitt weiter, das hilft, das Protokoll am realen Gerät zu verstehen. **Alle Geräte
 scannen** listet Bluetooth-Geräte in der Nähe mit ihren Diensten.
 
-## 7. Firmware laden (Konto-Login)
+## 7. Firmware laden (experimentell)
 
-Dieser Abschnitt ist unabhängig vom Bluetooth und rein optional. Die Firmware der neueren VMAX-Modelle
-gibt der Hersteller nur an angemeldete Konten heraus, deshalb ist ein Login nötig. Es ist der einzige
-bekannte Weg, an die Firmware dieser Modelle zu kommen, zum Beispiel um sie zu untersuchen.
+Dieser Abschnitt ist unabhängig vom Bluetooth, rein optional und experimentell. Er fragt den
+Firmware-Server des Herstellers (`api.gpstuner.com`) direkt nach der Firmware - denselben Server, den auch
+die offizielle App nutzt.
 
-**Wichtig zum Datenschutz.** Anders als der Rest der Seite spricht dieser Login direkt mit dem
-Hersteller-Server `vmax.gpstuner.com`. Deine E-Mail, dein Passwort und die Geräte-Kennungen gehen
-verschlüsselt dorthin, an sonst niemanden, nicht an den Entwickler. Nichts wird gespeichert. Was genau
-übertragen wird, steht im [Datenschutz](PRIVACY.de.md). Über das Fragezeichen an der Karte Firmware
+**Ehrlicher Stand.** Nach unserer Analyse ist dieser Weg über die Cloud derzeit praktisch zu: den
+Endpunkt, den die aktuelle offizielle App aufruft, hat der Hersteller abgeschaltet und der noch lebende
+Endpunkt liefert nur für eine Geräte-`uuid`, die seine Registry kennt. In aller Regel kommt daher
+`Invalid uuid`. Die Felder bleiben trotzdem, für den Fall, dass jemand eine gültige `uuid` (und einen
+gültigen Token) hat.
+
+**Kein Login, kein Passwort.** Die Seite meldet dich nicht an. Du gibst selbst zwei Dinge ein, falls du
+sie hast: einen Zugangs-Token und deine Geräte-uuid.
+
+**Wichtig zum Datenschutz.** Anders als der Rest der Seite spricht dieser Abschnitt direkt mit dem
+Hersteller-Server `api.gpstuner.com`. Der Token und die Geräte-Kennungen gehen dorthin, an sonst
+niemanden, nicht an den Entwickler. Nichts wird gespeichert, der Token wird in der Ausgabe maskiert. Was
+genau übertragen wird, steht im [Datenschutz](PRIVACY.de.md). Über das Fragezeichen an der Karte Firmware
 kommst du ebenfalls dorthin.
 
 So gehst du vor:
 
-1. **E-Mail und Passwort** deines VMAX- beziehungsweise GPS-Tuner-Kontos eingeben und auf **Einloggen**
-   tippen. Klappt es, erscheint "Login OK, Token erhalten" und die Firmware-Knöpfe werden frei. Hast du
-   dein Konto per Google oder Facebook angelegt, setze zuerst über die App oder die Webseite ein
-   Passwort, denn hier geht nur E-Mail plus Passwort.
-2. **Profil laden** zeigt die in deinem Konto registrierten Bikes. Damit siehst du, ob dein Scooter
-   registriert sein muss.
-3. **Geräte-Kennungen** eintragen: Serial (aus `DA1A1511`), Modell und Controller (aus `DA1A1802`).
-   Diese Werte stehen im Log, wenn du vorher per Bluetooth verbunden und ausgelesen hast. Die aktuelle
-   FW lässt du am besten auf `0.0.0`, dann bietet der Server die neueste Version als Update an.
-4. **Firmware prüfen** fragt den Server, welche Firmware es gibt. **Firmware laden** holt sie.
+1. **Zugangs-Token** eintragen, falls du einen hast. Er wird als Bearer-Header mitgeschickt, genau wie in
+   der App.
+2. **Geräte-uuid** eintragen. Das ist der Wert, an dem es hängt - ohne eine dem Server bekannte uuid kommt
+   `Invalid uuid`.
+3. **Geräte-Kennungen** ergänzen: Serial (aus `DA1A1511`), Modell und Controller (aus `DA1A1802`). Diese
+   Werte stehen im Log, wenn du vorher per Bluetooth verbunden und ausgelesen hast. Die aktuelle FW lässt
+   du am besten auf `0.0.0`, dann bietet der Server die neueste Version als Update an.
+4. **Firmware prüfen** beziehungsweise **Firmware laden** schickt die Anfrage an den Server.
 
-Die Seite zeigt die Roh-Antworten des Servers im Ausgabefeld. Klappt der Download noch nicht, liegt das
-meist an den genauen Feldnamen. Kopiere dann die Antwort und schick sie zurück, dann passen wir die
-Anfrage an.
+Die Seite zeigt die Roh-Antworten des Servers im Ausgabefeld. **Firmware-Ausgabe kopieren** legt sie in
+die Zwischenablage, der Token ist dabei maskiert. Klappt es wider Erwarten doch, schick die Antwort
+zurück, dann passen wir die Anfrage an.
 
 ## Wenn etwas nicht klappt
 
