@@ -1,49 +1,79 @@
-# Privacy Policy
+# Privacy notice
 
-This web app is built to keep your data on your device. This policy explains exactly what it does and
-does not do with your data.
+This web app is built to keep your data on your device. There is exactly **one** exception, which you
+trigger yourself: the optional firmware login. This notice says precisely what the app does with your
+data and what it does not.
 
-## The short version
+## In short
 
-The app collects nothing. There are no accounts, no analytics, no telemetry, no tracking, no ads, no
-cookies and no third-party scripts. Nothing is ever sent to the developer or to any manufacturer
-backend.
+The Bluetooth part collects nothing: no statistics, no telemetry, no tracking, no ads, no cookies and
+no third-party scripts. None of it goes to the developer.
 
-## What data the app handles and where it stays
+The **only** exception is the optional **firmware login** (the "Get firmware" section). If you use it,
+your email, your password and your scooter's device identifiers go straight to the vendor server
+`vmax.gpstuner.com`, to nobody else. If you do not use it, nothing leaves your device.
 
-All of the following stays on your device and is never uploaded anywhere:
+## What stays on your device
 
-- Live scooter data read over Bluetooth LE (the raw notifications the scooter sends back).
-- Any settings you make on the page (open and legal MaxSpeed value, profile index). They exist only
-  in the open page during your session.
-- Your language and theme choice. It lives in your browser's local storage and does not leave your
-  device.
-- The on-screen log. It exists only in the open page during your session and is never uploaded.
+Everything below stays on your device and is never uploaded:
 
-## The only network connection
+- The scooter's live data read over Bluetooth LE (the raw replies the scooter sends back).
+- The settings you make on the page (open and legal MaxSpeed value, profile index). They live only in
+  the open page during your session.
+- Your language and theme choice. It sits in your browser's local storage and does not leave the device.
+- The on-screen log. It lives only in the open page during your session.
 
-The app makes network connections in exactly two cases and no others:
+## The optional firmware login: what, where, why
 
-### 1. Loading the page
+**Why.** The newer VMAX models' firmware is delivered by the vendor only with account authentication.
+To fetch it you must log in with your VMAX or GPS-Tuner account, exactly like the official app. This is
+the only known route to get the firmware of these models.
 
-When you open or reload the page, your browser fetches the static files (`index.html`, `app.js`,
-`i18n.js`, `styles.css` and the favicon) from the host (for example GitHub Pages). The host sees only
-two things: your **IP address** and which file you requested. Those are the normal web-server logs
-every website has. It **never** sees any scooter data or commands. That data never reaches any server
-at all; it exists only on your device and travels only over the local Bluetooth link (see below).
+**What is sent and where.** Only to the vendor server `https://vmax.gpstuner.com`, over HTTPS, straight
+from your browser:
 
-### 2. Bluetooth LE to your scooter
+- On login: your **email** and **password** to `POST /api/login`. The response is an access token.
+- On firmware check and download: the **access token** plus the **device identifiers** (model,
+  controller, serial, current firmware version) to `POST /api/device/updates` and
+  `POST /api/device/update`.
 
-A local radio link to your scooter over Web Bluetooth. This is not an internet connection: no data
-leaves your device over the network for this. The commands and the notifications the scooter sends
-back travel only between your browser and the scooter.
+This is the same server and the same route the official app uses. This page adds nothing and redirects
+nothing.
 
-## No developer or manufacturer backend
+**What does not happen.**
 
-Nothing is ever sent to the developer or to any manufacturer backend. There is no cloud account and
-no server operated by this project that receives your data. For comparison: the original app for the
-newer VMAX models signs you in and talks to a manufacturer backend. This app does none of that.
+- The **developer** of this page **never** sees your credentials. There is no server of this project in
+  between. The connection goes directly from your browser to the vendor.
+- **No credentials are stored.** Email and password are used only for the request, the token lives only
+  in the open page's memory until you close or reload it.
+- There is **no statistics, no tracking and no sharing with third parties** by this page.
+
+**At the vendor.** What the vendor server does with the requests, such as access logs, is up to the
+vendor (GPS-Tuner or VMAX), just as with the official app. This page has no influence on that.
+
+**Voluntary.** The login is entirely optional. If you only want to read live values or test the speed
+limiter on your own device, you do not need it, and then nothing leaves your device.
+
+## The network connections at a glance
+
+The app opens a connection only in these cases, in no other:
+
+1. **Loading the page.** Your browser fetches the static files from the host (for example GitHub Pages):
+   `index.html`, `app.js`, `i18n.js`, `styles.css` and the icon. The host sees your IP address and which
+   file you fetched, the usual access logs of any website. It never sees scooter data, commands or
+   credentials.
+2. **Bluetooth LE to the scooter.** A local radio link over Web Bluetooth, not an internet connection.
+   Commands and replies run only between your browser and the scooter.
+3. **Optional firmware login to `vmax.gpstuner.com`.** Only when you start it yourself in the "Get
+   firmware" section, as described above.
+
+## No developer backend
+
+There is no server of this project that takes your data, no developer account, no cloud of this
+project. The only external connection with your data is the one **you** trigger with the firmware login,
+directly to the **vendor**.
 
 ## Contact
 
-For privacy questions, contact the author (Laufbursche) on GitHub: https://laufbursche42.github.io/Laufbursche42/
+For privacy questions contact the author (Laufbursche) on GitHub:
+https://laufbursche42.github.io/Laufbursche42/

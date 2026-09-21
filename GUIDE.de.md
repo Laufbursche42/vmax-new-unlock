@@ -61,6 +61,35 @@ Die Karte **Protokoll** zeigt jeden gesendeten und empfangenen Frame als Hex. Mi
 gibst du den Mitschnitt weiter, das hilft, das Protokoll am realen Gerät zu verstehen. **Alle Geräte
 scannen** listet Bluetooth-Geräte in der Nähe mit ihren Diensten.
 
+## 7. Firmware laden (Konto-Login)
+
+Dieser Abschnitt ist unabhängig vom Bluetooth und rein optional. Die Firmware der neueren VMAX-Modelle
+gibt der Hersteller nur an angemeldete Konten heraus, deshalb ist ein Login nötig. Es ist der einzige
+bekannte Weg, an die Firmware dieser Modelle zu kommen, zum Beispiel um sie zu untersuchen.
+
+**Wichtig zum Datenschutz.** Anders als der Rest der Seite spricht dieser Login direkt mit dem
+Hersteller-Server `vmax.gpstuner.com`. Deine E-Mail, dein Passwort und die Geräte-Kennungen gehen
+verschlüsselt dorthin, an sonst niemanden, nicht an den Entwickler. Nichts wird gespeichert. Was genau
+übertragen wird, steht im [Datenschutz](PRIVACY.de.md). Über das Fragezeichen an der Karte Firmware
+kommst du ebenfalls dorthin.
+
+So gehst du vor:
+
+1. **E-Mail und Passwort** deines VMAX- beziehungsweise GPS-Tuner-Kontos eingeben und auf **Einloggen**
+   tippen. Klappt es, erscheint "Login OK, Token erhalten" und die Firmware-Knöpfe werden frei. Hast du
+   dein Konto per Google oder Facebook angelegt, setze zuerst über die App oder die Webseite ein
+   Passwort, denn hier geht nur E-Mail plus Passwort.
+2. **Profil laden** zeigt die in deinem Konto registrierten Bikes. Damit siehst du, ob dein Scooter
+   registriert sein muss.
+3. **Geräte-Kennungen** eintragen: Serial (aus `DA1A1511`), Modell und Controller (aus `DA1A1802`).
+   Diese Werte stehen im Log, wenn du vorher per Bluetooth verbunden und ausgelesen hast. Die aktuelle
+   FW lässt du am besten auf `0.0.0`, dann bietet der Server die neueste Version als Update an.
+4. **Firmware prüfen** fragt den Server, welche Firmware es gibt. **Firmware laden** holt sie.
+
+Die Seite zeigt die Roh-Antworten des Servers im Ausgabefeld. Klappt der Download noch nicht, liegt das
+meist an den genauen Feldnamen. Kopiere dann die Antwort und schick sie zurück, dann passen wir die
+Anfrage an.
+
 ## Wenn etwas nicht klappt
 
 - **Der Scooter taucht nicht in der Liste auf.** Ist er an und in Reichweite? Nutze **Alle Geräte

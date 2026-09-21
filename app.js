@@ -9,7 +9,7 @@
 // write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
 // completely reconstructed, so this tool is first a read and test instrument on your own device.
 
-const BUILD = 'v21';
+const BUILD = 'v22';
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -618,11 +618,17 @@ function confirmDialog(bodyText) {
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   });
 }
-const HELP = { drossel: ['drosselTitle', 'drosselHelp'], disclaimer: ['footDisclaimer', 'disclaimerText'] };
+// Third entry, when present, is a doc name shown as a link at the bottom of the help dialog.
+const HELP = { drossel: ['drosselTitle', 'drosselHelp'], disclaimer: ['footDisclaimer', 'disclaimerText'], fwlogin: ['fwTitle', 'fwHelp', 'PRIVACY'] };
 function openHelp(key) {
   const h = HELP[key]; if (!h) return;
   $('help-title').textContent = t(h[0]); $('help-body').textContent = t(h[1]);
   const w = $('help-warn'); if (w) w.hidden = true;
+  const dl = $('help-doclink');
+  if (dl) {
+    if (h[2]) { dl.hidden = false; dl.textContent = t('fwPrivacyLink'); dl.onclick = e => { e.preventDefault(); closeHelp(); openDoc(docFile(h[2]), t('footPrivacy')); }; }
+    else { dl.hidden = true; dl.onclick = null; }
+  }
   const dlg = $('help'); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
 }
 function closeHelp() { const dlg = $('help'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
@@ -685,6 +691,67 @@ async function scanAllDevicesDiagnostic() {
   } catch (e) { log('scan failed: ' + e, 'log-err'); }
 }
 
+// ---- Firmware account login and download (vendor cloud) --------------------
+// Optional feature, independent of Bluetooth. It talks to the vendor host vmax.gpstuner.com, the same
+// backend the official VMAX app uses, to get an account token and pull the scooter firmware. The
+// account email and password and the device identifiers go there over HTTPS and nowhere else; nothing
+// reaches the developer. It runs only when the user fills the form and taps the buttons. See PRIVACY.
+const FW_BASE = 'https://vmax.gpstuner.com';
+let FW_TOKEN = null;
+function fwOut(s) { const el = $('fw-out'); if (el) { el.textContent += s + '\n'; el.scrollTop = el.scrollHeight; } }
+function fwFindToken(o) {
+  if (o == null) return null;
+  if (typeof o === 'object') { for (const k in o) { if (/access[_-]?token|token$/i.test(k) && typeof o[k] === 'string' && o[k].length > 8) return o[k]; const r = fwFindToken(o[k]); if (r) return r; } }
+  return null;
+}
+async function fwReq(method, path, fields, useToken) {
+  let url = FW_BASE + path;
+  if (useToken && FW_TOKEN) url += (path.indexOf('?') >= 0 ? '&' : '?') + 'access_token=' + encodeURIComponent(FW_TOKEN);
+  const opt = { method };
+  if (fields) { const fd = new FormData(); for (const p of fields) if (p[1] !== '') fd.append(p[0], p[1]); opt.body = fd; }
+  fwOut('> ' + method + ' ' + path); log('FW ' + method + ' ' + path);   // log the path only, never the token
+  try {
+    const res = await fetch(url, opt);
+    const text = await res.text();
+    fwOut('  <- HTTP ' + res.status + ' (' + text.length + ' bytes)');
+    return { status: res.status, text: text };
+  } catch (e) { fwOut('  network error: ' + e.message + ' (CSP, CORS or offline)'); return { status: 0, text: '' }; }
+}
+function fwSetEnabled(on) { ['fw-profile', 'fw-check', 'fw-download'].forEach(id => { const b = $(id); if (b) b.disabled = !on; }); }
+async function fwLogin() {
+  FW_TOKEN = null; fwSetEnabled(false);
+  const email = ($('fw-email').value || '').trim(), pass = $('fw-pass').value || '';
+  if (!email || !pass) { $('fw-loginstate').textContent = t('fwNeedCreds'); return; }
+  const r = await fwReq('POST', '/api/login', [['email', email], ['password', pass]], false);
+  fwOut(r.text.slice(0, 1500));
+  let tok = null; try { tok = fwFindToken(JSON.parse(r.text)); } catch (e) {}
+  if (tok) { FW_TOKEN = tok; $('fw-loginstate').textContent = t('fwLoginOk'); fwSetEnabled(true); }
+  else { $('fw-loginstate').textContent = t('fwLoginNoToken'); }
+}
+async function fwProfile() { const r = await fwReq('GET', '/api/profile', null, true); fwOut(r.text.slice(0, 3000)); }
+function fwDeviceFields() {
+  const cur = ($('fw-cur').value || '').trim();
+  return [['manufacturer', 'vmax'], ['model', ($('fw-model').value || '').trim()], ['controller', ($('fw-ctrl').value || '').trim()],
+          ['serial', ($('fw-serial').value || '').trim()], ['version', cur], ['gpst_fw_mcu', cur]];
+}
+async function fwCheck() { const r = await fwReq('POST', '/api/device/updates', fwDeviceFields(), true); fwOut(r.text.slice(0, 3000)); }
+async function fwDownload() {
+  const r = await fwReq('POST', '/api/device/update', fwDeviceFields(), true);
+  fwOut(r.text.slice(0, 2000));
+  const body = r.text.trim();
+  const m = body.match(/https?:\/\/[^\s"'<>]+\.(?:zip|bin|hex|ota|elf)/i);
+  if (m) { fwOut('  firmware URL in response -> opening: ' + m[0]); window.open(m[0], '_blank'); }
+  else if (r.status === 200 && body.length > 64 && !/^[<{[]/.test(body)) { fwSaveBlob(r.text); }
+  else { fwOut('  no firmware file/URL recognised - send the raw response back so we can adjust the fields'); }
+}
+function fwSaveBlob(text) {
+  try {
+    const blob = new Blob([text], { type: 'application/octet-stream' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'vmax_firmware.bin';
+    document.body.appendChild(a); a.click(); a.remove(); fwOut('  response saved as vmax_firmware.bin');
+  } catch (e) { fwOut('  save failed: ' + e); }
+}
+
 // ---- Init ------------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   buildModelDropdown();
@@ -704,6 +771,10 @@ window.addEventListener('DOMContentLoaded', () => {
   { const b = $('btn-copy-log'); if (b) b.addEventListener('click', copyLog); }
   { const b = $('btn-clear-log'); if (b) b.addEventListener('click', clearLog); }
   { const b = $('btn-diag'); if (b) b.addEventListener('click', scanAllDevicesDiagnostic); }
+  { const b = $('fw-login'); if (b) b.addEventListener('click', fwLogin); }
+  { const b = $('fw-profile'); if (b) b.addEventListener('click', fwProfile); }
+  { const b = $('fw-check'); if (b) b.addEventListener('click', fwCheck); }
+  { const b = $('fw-download'); if (b) b.addEventListener('click', fwDownload); }
 
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });
@@ -720,6 +791,8 @@ window.addEventListener('DOMContentLoaded', () => {
     }); }
   document.addEventListener('click', e => {
     const dd = e.target.closest && e.target.closest('[data-open-disclaimer]');
-    if (dd) { e.preventDefault(); openHelp('disclaimer'); }
+    if (dd) { e.preventDefault(); openHelp('disclaimer'); return; }
+    const dp = e.target.closest && e.target.closest('[data-open-privacy]');
+    if (dp) { e.preventDefault(); openDoc(docFile('PRIVACY'), t('footPrivacy')); }
   });
 });

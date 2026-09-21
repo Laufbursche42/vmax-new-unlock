@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <!-- frame-ancestors has no effect in a meta element, only as an HTTP header. GitHub Pages sends no
      custom headers, so it is left out here. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<!-- connect-src also allows vmax.gpstuner.com: only the optional firmware account login (Firmware
+     section) talks to that vendor host, see the privacy notice. Bluetooth runs over Web Bluetooth,
+     not over connect-src. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://vmax.gpstuner.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title data-t="pageTitle">Laufbursche VMAX new Tool</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="stylesheet" href="styles.css?v=21">
+<link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
 <div class="wrap">
@@ -83,6 +86,30 @@
     <p class="hint" data-t="drosselHint"></p>
   </div>
 
+  <div class="card" id="fw-card">
+    <div class="card-head"><h2 data-t="fwTitle"></h2><button type="button" class="help-btn" data-help="fwlogin" aria-label="Info">?</button></div>
+    <p class="hint" data-t="fwIntro"></p>
+    <p class="warn" data-t="fwPrivacyNote"></p>
+    <div class="set-row"><label data-t="fwEmail"></label><input id="fw-email" type="email" autocomplete="username" inputmode="email"></div>
+    <div class="set-row"><label data-t="fwPass"></label><input id="fw-pass" type="password" autocomplete="current-password"></div>
+    <div class="btns"><button class="primary span2" id="fw-login" data-t="fwBtnLogin"></button></div>
+    <p class="hint" id="fw-loginstate"></p>
+    <p class="hint" data-t="fwFields"></p>
+    <div class="set-row"><label data-t="fwSerial"></label><input id="fw-serial" placeholder="VMAX_KM..."></div>
+    <div class="speed-values">
+      <div class="sv"><label data-t="fwModel"></label><input id="fw-model" value="VMAX_VX4_DE"></div>
+      <div class="sv"><label data-t="fwCtrl"></label><input id="fw-ctrl" value="K5266_K2041"></div>
+      <div class="sv"><label data-t="fwCur"></label><input id="fw-cur" value="0.0.0"></div>
+    </div>
+    <div class="btns">
+      <button id="fw-profile" data-t="fwBtnProfile" disabled></button>
+      <button id="fw-check" data-t="fwBtnCheck" disabled></button>
+      <button class="primary" id="fw-download" data-t="fwBtnDownload" disabled></button>
+    </div>
+    <pre id="fw-out"></pre>
+    <p class="hint" data-t="fwHint"></p>
+  </div>
+
   <div class="card">
     <h2 data-t="charsTitle"></h2>
     <p class="hint" data-t="charsHint"></p>
@@ -132,7 +159,7 @@
     <h3 id="help-title"></h3>
     <button type="button" id="help-x">&times;</button>
   </div>
-  <div class="doc-body"><p id="help-body"></p><p id="help-warn" class="help-warn" hidden></p></div>
+  <div class="doc-body"><p id="help-body"></p><p id="help-warn" class="help-warn" hidden></p><p><a href="#" id="help-doclink" hidden></a></p></div>
   <div class="doc-foot">
     <button type="button" id="help-close" data-t="docClose"></button>
   </div>
@@ -150,7 +177,7 @@
   </div>
 </dialog>
 
-<script src="i18n.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="i18n.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

@@ -58,6 +58,33 @@ The **Log** card shows every sent and received frame as hex. **Copy log** shares
 helps to understand the protocol on the real device. **Scan all devices** lists nearby Bluetooth
 devices with their services.
 
+## 7. Get firmware (account login)
+
+This section is independent of Bluetooth and entirely optional. The vendor releases the newer VMAX
+models' firmware only to logged-in accounts, so a login is required. It is the only known route to get
+the firmware of these models, for example to study it.
+
+**Important for privacy.** Unlike the rest of the page, this login talks directly to the vendor server
+`vmax.gpstuner.com`. Your email, password and the device identifiers go there encrypted, to nobody
+else, not to the developer. Nothing is stored. What exactly is transmitted is in the
+[privacy notice](PRIVACY.md). The question mark on the Firmware card also takes you there.
+
+How to do it:
+
+1. Enter the **email and password** of your VMAX or GPS-Tuner account and tap **Log in**. On success it
+   shows "Login OK, token received" and the firmware buttons are enabled. If you created your account
+   via Google or Facebook, first set a password in the app or on the website, because here only email
+   plus password works.
+2. **Load profile** shows the bikes registered in your account. This tells you whether your scooter must
+   be registered.
+3. Enter the **device identifiers**: serial (from `DA1A1511`), model and controller (from `DA1A1802`).
+   These values are in the log if you connected and read over Bluetooth first. Best leave the current FW
+   at `0.0.0` so the server offers the latest version as an update.
+4. **Check firmware** asks the server what firmware exists. **Get firmware** fetches it.
+
+The page shows the server's raw responses in the output field. If the download does not work yet, it is
+usually the exact field names. Copy the response and send it back, then we adjust the request.
+
 ## If something does not work
 
 - **The scooter does not appear in the list.** Is it on and in range? Use **Scan all devices**.
