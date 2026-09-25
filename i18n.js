@@ -11,6 +11,8 @@ window.I18N = {
     themeToLight: "Auf helle Darstellung umschalten",
     themeToDark: "Auf dunkle Darstellung umschalten",
 
+    sunsetBannerHtml: "<b>Dieses Tool zieht um.</b> Dieses Repo wird <b>nicht mehr weiterentwickelt</b> - bitte wechsle zum neuen Tool: <a href=\"https://lb-tool-web.pages.dev/\" target=\"_blank\" rel=\"noopener\">lb-tool-web.pages.dev</a>. Probleme beim Wechsel? Öffne ein <a href=\"https://github.com/Laufbursche42/Laufbursche42/issues/new\" target=\"_blank\" rel=\"noopener\">Issue auf GitHub</a> oder schick eine <a href=\"https://www.escooter-stammtisch.de/index.php?user/6497-laufbursche/\" target=\"_blank\" rel=\"noopener\">PN im eScooter-Stammtisch</a>.",
+
     bannerHtml: "<b>Hinweis: Sperren und Entsperren funktioniert hier nicht.</b> Dieses Tool kann die Drossel der neueren VMAX-Modelle derzeit <b>nicht setzen und nicht lösen</b> - der Schreibbefehl (MotorTuning MaxSpeed → Merkmal DA1A160D) ist aus der Hersteller-App rekonstruiert, wird von ihr aber nie gesendet, und kein Controller hat je bestätigt, dass er einen geschriebenen Wert annimmt. <b>Auslesen funktioniert:</b> Live-Werte, Konfiguration, Tuning und alle lesbaren Merkmale werden angezeigt. Dies ist ein Lese- und Testwerkzeug. <a href=\"#\" data-open-disclaimer>Haftungsausschluss lesen</a>.",
 
     s1Title: "So fängst du an",
@@ -144,6 +146,8 @@ window.I18N = {
     brandSub: "VMAX new Tool",
     themeToLight: "Switch to light theme",
     themeToDark: "Switch to dark theme",
+
+    sunsetBannerHtml: "<b>This tool is moving.</b> This repository is <b>no longer maintained</b> - please switch to the new tool: <a href=\"https://lb-tool-web.pages.dev/\" target=\"_blank\" rel=\"noopener\">lb-tool-web.pages.dev</a>. Trouble switching? Open an <a href=\"https://github.com/Laufbursche42/Laufbursche42/issues/new\" target=\"_blank\" rel=\"noopener\">issue on GitHub</a> or send a <a href=\"https://www.escooter-stammtisch.de/index.php?user/6497-laufbursche/\" target=\"_blank\" rel=\"noopener\">PM on the eScooter-Stammtisch forum</a>.",
 
     bannerHtml: "<b>Note: locking and unlocking does not work here.</b> This tool currently <b>cannot set or release</b> the speed limiter on the newer VMAX models - the write command (MotorTuning MaxSpeed → characteristic DA1A160D) is reconstructed from the vendor app, which never sends it, and no controller has ever confirmed it accepts a written value. <b>Reading works:</b> live values, configuration, tuning and every readable characteristic are shown. This is a read-and-test instrument. <a href=\"#\" data-open-disclaimer>Read the disclaimer</a>.",
 
