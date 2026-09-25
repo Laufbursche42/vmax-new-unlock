@@ -195,18 +195,6 @@ dialog::backdrop { background: var(--backdrop); }
 /* Red warning line inside the "?" help dialog, shown only for risky settings. */
 .help-warn { color: var(--bad); font-weight: 600; margin: 10px 0 0; }
 
-/* Top banner: lock/unlock does not work, reading does. Always visible, not dismissible. */
-.banner { background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 12px; padding: 12px 14px;
-  color: var(--text); font-size: 13px; line-height: 1.5; }
-.banner b { color: var(--bad-strong); }
-.banner a { color: var(--accent); }
-
-/* Deprecation banner: red tone, always visible, cannot be dismissed. */
-.sunset-banner { background: var(--bad-bg); border: 1px solid var(--bad-line); border-radius: 10px;
-  padding: 11px 14px; font-size: 12px; line-height: 1.5; color: var(--text); }
-.sunset-banner b { color: var(--bad-strong); }
-.sunset-banner a { color: var(--bad-strong); text-decoration: underline; }
-
 /* Red reason line under a gated / disabled control. */
 .danger { color: var(--bad); background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 8px;
   padding: 9px 11px; font-weight: 700; margin: 0; font-size: 12px; }

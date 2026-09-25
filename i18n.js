@@ -11,8 +11,6 @@ window.I18N = {
     themeToLight: "Auf helle Darstellung umschalten",
     themeToDark: "Auf dunkle Darstellung umschalten",
 
-    sunsetBannerHtml: "<b>Dieses Tool zieht um.</b> Dieses Repo wird <b>nicht mehr weiterentwickelt</b> - bitte wechsle zum neuen Tool: <a href=\"https://lb-tool-web.pages.dev/\" target=\"_blank\" rel=\"noopener\">lb-tool-web.pages.dev</a>. Probleme beim Wechsel? Öffne ein <a href=\"https://github.com/Laufbursche42/Laufbursche42/issues/new\" target=\"_blank\" rel=\"noopener\">Issue auf GitHub</a> oder schick eine <a href=\"https://www.escooter-stammtisch.de/index.php?user/6497-laufbursche/\" target=\"_blank\" rel=\"noopener\">PN im eScooter-Stammtisch</a>.",
-
     s1Title: "So fängst du an",
     sub: "Live über Web Bluetooth mit einem neueren VMAX-E-Scooter reden, also den Modellen der App VMAX E-Scooter (VX2, VX4, VX8, R40, R55). Diese Seite ist für das iPhone gedacht (App Bluefy), läuft aber auch in Chrome oder Edge auf Android und Desktop. Alles bleibt lokal auf deinem Gerät, es werden keine Daten an einen Server gesendet.",
     expWarn: "Machbarkeitsstudie und Testwerkzeug, kein fertiges Produkt. Die neueren VMAX-Modelle sprechen das GPST-Protokoll KingmeterVmax, dessen Frames aus der nativen Bibliothek der Hersteller-App rekonstruiert wurden; Verbinden und Auslesen funktionieren - Live-Werte, Konfiguration und alle lesbaren Merkmale werden angezeigt. Sperren und Entsperren funktioniert hier nicht: Die Hersteller-App schreibt die Drossel nie selbst, daher ist nicht bewiesen, dass der Controller einen geschriebenen Wert annimmt, und das Schreiben ist abgeschaltet. Kein fehlerfreier Betrieb, keine Gewährleistung, alles auf eigenes Risiko. <a href=\"#\" data-open-disclaimer>Haftungsausschluss lesen</a>.",
@@ -144,8 +142,6 @@ window.I18N = {
     brandSub: "VMAX new Tool",
     themeToLight: "Switch to light theme",
     themeToDark: "Switch to dark theme",
-
-    sunsetBannerHtml: "<b>This tool is moving.</b> This repository is <b>no longer maintained</b> - please switch to the new tool: <a href=\"https://lb-tool-web.pages.dev/\" target=\"_blank\" rel=\"noopener\">lb-tool-web.pages.dev</a>. Trouble switching? Open an <a href=\"https://github.com/Laufbursche42/Laufbursche42/issues/new\" target=\"_blank\" rel=\"noopener\">issue on GitHub</a> or send a <a href=\"https://www.escooter-stammtisch.de/index.php?user/6497-laufbursche/\" target=\"_blank\" rel=\"noopener\">PM on the eScooter-Stammtisch forum</a>.",
 
     s1Title: "How to start",
     sub: "Talk live over Web Bluetooth to a newer VMAX scooter, meaning the models of the VMAX E-Scooter app (VX2, VX4, VX8, R40, R55). This page targets the iPhone (Bluefy app) but also runs in Chrome or Edge on Android and desktop. Everything stays local on your device; no data is sent to any server.",

@@ -10,7 +10,7 @@
 // has confirmed it accepts a written value, so writing stays disabled here (WRITE_ENABLED = false).
 // This is a read-and-test instrument. Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v27';
+const BUILD = 'v28';
 
 // Master gate for every lock/unlock/tuning write. Reading is never gated by this. If a real device
 // ever confirms the controller accepts a written MaxSpeed, flip this one line to re-enable the writes.
