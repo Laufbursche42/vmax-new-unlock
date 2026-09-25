@@ -61,33 +61,32 @@ if [ -n "$dash_blocked" ]; then
 fi
 
 # =================================================================
-# PHASE 0.5 - stamp the build version (automatic on every commit)
+# PHASE 0B - auto-bump the cache-buster (BUILD in the main script + all ?v= in index.html)
 # =================================================================
-# The build number = the count this commit will have (existing commits + 1). It is written into
-# app.js (const BUILD, shown in the footer and the diagnostic) and into every ?v= cache-buster in
-# index.html, so the visible version and the browser cache always move together - no manual bump,
-# and it can never silently lag behind the code again. A file is stamped only when it has no
-# unstaged changes, so work in progress is never pulled into the commit.
-if command -v perl >/dev/null 2>&1; then
-  _bn=$(git rev-list --count HEAD 2>/dev/null || echo 0); _bn=$((_bn + 1))
-  if [ -f "$REPO_ROOT/app.js" ] && grep -q "const BUILD = '" "$REPO_ROOT/app.js"; then
-    if git diff --quiet -- app.js 2>/dev/null; then
-      perl -CSD -i -pe "s/const BUILD = '[^']*';/const BUILD = 'v$_bn';/" "$REPO_ROOT/app.js"
-      if node --check "$REPO_ROOT/app.js" 2>"$TMPD/stamperr"; then
-        git add -- app.js; echo "  stamped build -> $_bn (app.js)"
-      else
-        echo "BLOCK: build stamp broke app.js:"; sed 's/^/        /' "$TMPD/stamperr"; RC=1
-      fi
-    else
-      echo "  NOTE: app.js has unstaged changes - build not stamped this commit"
-    fi
-  fi
-  if [ -f "$REPO_ROOT/index.html" ] && grep -q '?v=' "$REPO_ROOT/index.html"; then
-    if git diff --quiet -- index.html 2>/dev/null; then
-      perl -CSD -i -pe "s/\\?v=[^\"'&]*/?v=$_bn/g" "$REPO_ROOT/index.html"
-      git add -- index.html; echo "  stamped cache-buster -> ?v=$_bn (index.html)"
-    else
-      echo "  NOTE: index.html has unstaged changes - cache-buster not stamped this commit"
+# No build step ships here, so a stale browser cache is the only thing between a tester and a fix.
+# Handles both `const BUILD = 'vN'` and `var BUILD = "vN"` and preserves the quote style.
+MAIN=""
+for c in page.js app.js; do
+  if [ -f "$c" ] && grep -qE "BUILD *= *['\"]v[0-9]+['\"]" "$c"; then MAIN="$c"; break; fi
+done
+IDX=""
+if [ -f index.html ] && grep -qE '\?v=[0-9]+' index.html; then IDX="index.html"; fi
+if [ -n "$MAIN" ] && git diff --cached --name-only 2>/dev/null | grep -qE '\.(js|css|html)$'; then
+  OLD_B=$(git show HEAD:"$MAIN" 2>/dev/null | sed -nE "s/.*BUILD *= *['\"]v([0-9]+)['\"].*/\1/p" | head -1)
+  ST_B=$(git show :"$MAIN" 2>/dev/null | sed -nE "s/.*BUILD *= *['\"]v([0-9]+)['\"].*/\1/p" | head -1)
+  if [ -n "$OLD_B" ] && [ -n "$ST_B" ]; then
+    if [ "$ST_B" = "$OLD_B" ]; then NEW_B=$((OLD_B + 1)); else NEW_B="$ST_B"; fi
+    bump_block=0
+    for f in "$MAIN" $IDX; do
+      [ -f "$f" ] || continue
+      git diff --quiet -- "$f" 2>/dev/null && continue
+      echo "BLOCK: $f needs a cache-buster bump but also has UNSTAGED changes -> stage the whole file first."
+      RC=1; bump_block=1
+    done
+    if [ "$bump_block" -eq 0 ]; then
+      perl -i -pe "s/(BUILD\s*=\s*['\"])v[0-9]+(['\"])/\${1}v$NEW_B\${2}/" "$MAIN"; git add "$MAIN"
+      if [ -n "$IDX" ]; then perl -i -pe "s/\?v=[0-9]+/?v=$NEW_B/g" "$IDX"; git add "$IDX"; fi
+      echo "  auto-bumped cache-buster -> v$NEW_B ($MAIN${IDX:+ + $IDX})"
     fi
   fi
 fi

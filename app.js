@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v29';
+const BUILD = 'v30';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
