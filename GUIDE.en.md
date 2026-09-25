@@ -1,12 +1,12 @@
 # Guide
 
-This guide walks step by step through the VMAX new Tool: connect and read out every value. It assumes
-nothing.
+This guide walks step by step through the VMAX new Tool: connect, read out every value, and write the
+documented settings and limiter. It assumes nothing.
 
-**Important first:** locking and unlocking does not work with this tool. The limiter write command is
-reconstructed from the vendor app, which never sends it, and no controller has ever confirmed it accepts a
-written value. So writing is disabled here. The tool is a read-and-diagnostic instrument: reading works,
-locking/unlocking does not.
+**Important first:** the write is sent, but its effect is unconfirmed on hardware. The limiter write
+command is reconstructed from the vendor app, which never sends it itself, and no controller has ever
+confirmed it accepts a written value. The tool sends the documented writes on request; whether a real
+controller acts on them is unconfirmed (hardware test pending). Reading is proven-safe and always works.
 
 ## What you need
 
@@ -37,7 +37,9 @@ readable characteristic once automatically.
 - The **Live values** card shows speed, battery, voltage, power, temperature, limit, motor, tuning and
   more as tiles. Raw values without a confirmed unit are marked as such.
 - The **Settings** card shows the read-out configuration (limit, wheel size, assist, motor and battery
-  nameplate, MotorTuning) as a read-only display.
+  nameplate, MotorTuning) and, below it, the **Change (write)** controls for the comfort functions the
+  vendor app writes (light, assist level, start mode, walk assist, beeper, units and more). Pick a value
+  and tap **Set**; the command goes as SetSetting to `DA1A1A03` behind a confirm.
 - The **Advanced settings** card shows the full MotorTuning, battery detail, live motor, status, session
   stats, firmware, serial numbers and error codes, plus the list of all discovered characteristics.
 - **Read all values** re-reads without reconnecting.
@@ -48,11 +50,14 @@ In the advanced settings, **Read tuning** reads the MotorTuning characteristic `
 reports a MotorTuning, the values appear in the display and the log. This changes nothing. On the measured
 devices this characteristic is often absent entirely.
 
-## 5. Speed limiter (disabled)
+## 5. Speed limiter
 
-The **Speed limiter** card shows the fields and buttons a write would use - for transparency, but
-**disabled and greyed out**. A red line states why. The function stays locked until a real device confirms
-the controller accepts a written MaxSpeed value.
+The **Speed limiter** card writes MotorTuning to `DA1A160D`. **Unlock** sets MaxSpeed to the open value,
+**Lock** sets it back to the legal value; both write the same MotorTuning command, and an optional
+**SpeedCut** value is written along with it. MaxSpeed and SpeedCut are raw byte values (cap 250 and 100).
+Every write asks for confirmation first. The write is sent, but its effect on a real controller is
+unconfirmed - the vendor app never sends it. If the characteristic `DA1A160D` is absent on the device, the
+buttons stay disabled because there is nothing to write to.
 
 ## 6. Log
 

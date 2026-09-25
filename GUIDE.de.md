@@ -1,12 +1,13 @@
 # Anleitung
 
-Diese Anleitung führt Schritt für Schritt durch das VMAX new Tool: verbinden und alle Werte auslesen.
-Sie setzt nichts voraus.
+Diese Anleitung führt Schritt für Schritt durch das VMAX new Tool: verbinden, alle Werte auslesen und die
+dokumentierten Einstellungen und die Drossel schreiben. Sie setzt nichts voraus.
 
-**Wichtig vorweg:** Sperren und Entsperren funktioniert mit diesem Tool nicht. Der Schreibbefehl für die
-Drossel ist aus der Hersteller-App rekonstruiert, wird von ihr aber nie gesendet, und kein Controller hat
-je bestätigt, dass er einen geschriebenen Wert annimmt. Deshalb ist das Schreiben hier abgeschaltet. Das
-Tool ist ein Lese- und Diagnosewerkzeug: Auslesen funktioniert, Sperren/Entsperren nicht.
+**Wichtig vorweg:** Der Schreibbefehl wird gesendet, seine Wirkung ist an echter Hardware aber
+unbestätigt. Der Schreibbefehl für die Drossel ist aus der Hersteller-App rekonstruiert, wird von ihr aber
+nie selbst gesendet, und kein Controller hat je bestätigt, dass er einen geschriebenen Wert annimmt. Das
+Tool sendet die dokumentierten Schreibbefehle auf Anforderung; ob ein echter Controller darauf reagiert,
+ist unbestätigt (Hardware-Test steht aus). Auslesen ist bewiesen sicher und funktioniert immer.
 
 ## Was du brauchst
 
@@ -37,7 +38,10 @@ Liste. Lass beim ersten Mal alle Dienste und Merkmale zu. Nach dem Verbinden ste
 - Die Karte **Live-Werte** zeigt Geschwindigkeit, Akku, Spannung, Leistung, Temperatur, Limit, Motor,
   Tuning und mehr als Kacheln. Rohwerte ohne gesicherte Einheit sind als solche markiert.
 - Die Karte **Einstellungen** zeigt die ausgelesene Konfiguration (Limit, Radgröße, Unterstützung,
-  Motor- und Akku-Kenndaten, MotorTuning) als reine Anzeige.
+  Motor- und Akku-Kenndaten, MotorTuning) und darunter die **Ändern (schreiben)**-Steuerungen für die
+  Komfortfunktionen, die die Hersteller-App schreibt (Licht, Unterstützungsstufe, Start-Modus,
+  Schiebehilfe, Signalton, Einheiten und mehr). Wert wählen und auf **Setzen** tippen; der Befehl geht als
+  SetSetting an `DA1A1A03`, jeweils mit Sicherheitsabfrage.
 - Die Karte **Erweiterte Einstellungen** zeigt das vollständige MotorTuning, Akku-Detail, Live-Motor,
   Status, Statistik, Firmware, Seriennummern und Fehlercodes, dazu die Liste aller gefundenen Merkmale.
 - **Alles auslesen** liest die Werte erneut, ohne neu zu verbinden.
@@ -48,11 +52,14 @@ In den erweiterten Einstellungen liest **Tuning auslesen** das MotorTuning-Merkm
 Scooter ein MotorTuning, erscheinen die Werte in der Anzeige und im Log. Das verändert nichts. Auf den
 gemessenen Geräten fehlt dieses Merkmal oft ganz.
 
-## 5. Drossel (deaktiviert)
+## 5. Drossel
 
-Die Karte **Drossel** zeigt die Felder und Knöpfe, die das Schreiben nutzen würde - zur Transparenz, aber
-**deaktiviert und ausgegraut**. Ein roter Hinweis nennt den Grund. Die Funktion bleibt gesperrt, bis der
-Controller an einem echten Gerät bestätigt, dass er einen geschriebenen MaxSpeed-Wert annimmt.
+Die Karte **Drossel** schreibt MotorTuning an `DA1A160D`. **Entsperren** setzt MaxSpeed auf den offenen
+Wert, **Sperren** auf den legalen Wert zurück; beide schreiben denselben MotorTuning-Befehl, ein optionaler
+**SpeedCut**-Wert wird mitgeschrieben. MaxSpeed und SpeedCut sind rohe Byte-Werte (Obergrenze 250 und 100).
+Vor jedem Schreiben kommt eine Sicherheitsabfrage. Der Befehl wird gesendet, seine Wirkung an einem echten
+Controller ist aber unbestätigt - die Hersteller-App sendet ihn nie. Fehlt das Merkmal `DA1A160D` auf dem
+Gerät, bleiben die Tasten deaktiviert, weil es dann kein Ziel zum Schreiben gibt.
 
 ## 6. Log
 

@@ -7,12 +7,13 @@ line (Bluetooth name `hw_`/`zyd_`, *VMAX connect* app) use the sister tool
 [vmax-unlock](https://laufbursche42.github.io/vmax-unlock/). Nothing to install: it runs in
 **Bluefy** on iOS and in **Chrome** on Android or desktop.
 
-> **Locking and unlocking does not work here.** This is a read-and-test instrument. The limiter write
-> (MotorTuning MaxSpeed -> characteristic `DA1A160D`) is reconstructed from the vendor app, which never
-> sends it, and no controller has ever confirmed it accepts a written value - so the write is disabled in
-> the tool. **Reading works:** live values, configuration, tuning and every readable characteristic are
-> shown. Error-free operation is not promised and there is no warranty. Read the [Disclaimer](#disclaimer)
-> before you connect a scooter.
+> **The write is sent; its effect is unconfirmed on hardware.** This is a read-and-test instrument. The
+> limiter write (MotorTuning MaxSpeed/SpeedCut -> characteristic `DA1A160D`) and the comfort settings
+> (SetSetting -> `DA1A1A03`) are reconstructed from the vendor app and are sent on request. The vendor app
+> never writes the limiter itself, though, and no controller has confirmed it accepts a written value - so
+> the effect on a real device is unconfirmed (hardware test pending). **Reading works:** live values,
+> configuration, tuning and every readable characteristic are shown. Error-free operation is not promised
+> and there is no warranty. Read the [Disclaimer](#disclaimer) before you connect a scooter.
 
 **Open the web app: [laufbursche42.github.io/vmax-new-unlock](https://laufbursche42.github.io/vmax-new-unlock/)**
 
@@ -39,6 +40,9 @@ Then open the printed address in a browser that supports Web Bluetooth.
 - **Show every value it can read:** live telemetry tiles, a read-out settings panel, and an advanced
   panel with the full MotorTuning decode, battery/BMS detail, motor, status, stats, firmware id, serials
   and error codes.
+- **Write the comfort settings** the vendor app writes (light, assist level, start mode, walk assist,
+  beeper, units and more) via SetSetting to `DA1A1A03`, each behind a confirm.
+- **Write MotorTuning** (MaxSpeed / SpeedCut) to `DA1A160D` behind a confirm.
 - **List characteristics:** every service and characteristic with its properties.
 - **Read the MotorTuning report** (`DA1A160C`) and decode all ordinals.
 - **A full protocol log:** timestamped TX/RX hex, decoded lines, autoscroll, anonymize toggle,
@@ -46,29 +50,30 @@ Then open the printed address in a browser that supports Web Bluetooth.
 
 ## What it does not do
 
-- **Lock / unlock / derestrict.** The limiter write to `DA1A160D` is disabled (see above). The buttons
-  are shown greyed for transparency but never fire.
 - **No firmware / OTA.** There is no cloud firmware fetch; the tool talks only to the device over BLE.
 
 ## Honest note
 
-The vendor app never sends the MotorTuning write command. The frame was reconstructed from the native
-library `libble-sdk-native-lib.so` (`GPSTProtocolHandler::WriteMotorTuning`). Whether the controller
-accepts a written value, and whether `MaxSpeed` changes the eKFV limiter, is **not proven** - and on the
-measured devices the write characteristic `DA1A160D` is absent entirely. That is why writing is gated off
-behind a single flag; if a real device ever proves it, one line re-enables it.
+The tool sends the documented write commands. The vendor app, however, never sends the MotorTuning write
+command itself. The frame was reconstructed from the native library `libble-sdk-native-lib.so`
+(`GPSTProtocolHandler::WriteMotorTuning`). Whether the controller accepts a written value, and whether
+`MaxSpeed` changes the eKFV limiter, is **not proven** - and on the measured devices the write
+characteristics `DA1A160D` and `DA1A1A03` are absent entirely, in which case the write buttons stay
+disabled because there is nothing to write to. The effect on a real device is unconfirmed (hardware test
+pending).
 
-## Frame format (reconstructed, not sent by this tool)
+## Frame format (reconstructed)
 
 `WriteMotorTuning` builds the buffer like this:
 
 - Byte 0 = profile index.
 - Then one value byte per tuning type, sorted by type ordinal, unset types `0xFF`.
-- Type ordinals: MaxPower 0, AssistFactor 1, DynamicFactor 2, SpeedCut 3, **MaxSpeed 4**.
+- Type ordinals: MaxPower 0, AssistFactor 1, DynamicFactor 2, **SpeedCut 3**, **MaxSpeed 4**.
 - Target characteristic `DA1A160D`. No checksum, no encryption in the write path.
 
-Setting only `MaxSpeed` would therefore be, for example: `[idx] FF FF FF FF [value]`. The tool decodes the
-matching **read** report (`DA1A160C`) but never sends this write.
+Setting only `MaxSpeed` is therefore, for example: `[idx] FF FF FF FF [value]`; SpeedCut plus MaxSpeed is
+`[idx] FF FF FF [SpeedCut] [MaxSpeed]`. `SetSetting` writes `[prefix 0x60][keycode][value code]` to
+`DA1A1A03`. The tool also decodes the matching MotorTuning **read** report (`DA1A160C`).
 
 ## Disclaimer
 
@@ -77,7 +82,8 @@ matching **read** report (`DA1A160C`) but never sends this write.
 - **This is a feasibility study**, not a finished product. It shows what the scooter's Bluetooth
   protocol makes possible. Nothing here promises that it works with your scooter, your phone or your
   browser, or that it still works after the next controller firmware or browser release.
-- **Locking / unlocking does not work.** The limiter write is unconfirmed and disabled.
+- **The limiter write is sent, but its effect is unconfirmed on hardware.** The vendor app never sends it
+  and no controller is proven to accept it.
 - **Raising the limit would end the road approval.** A scooter that no longer holds the eKFV limit is not a
   road-legal eKFV any more. The operating permit (Betriebserlaubnis) is void, and the insurance cover goes
   with it.

@@ -1,20 +1,21 @@
 'use strict';
 
-// Laufbursche VMAX new Tool - Web Bluetooth read/diagnostic tool for the newer VMAX models
+// Laufbursche VMAX new Tool - Web Bluetooth read/write tool for the newer VMAX models
 // (VMAX E-Scooter app, GPST protocol KingmeterVmax, GATT family DA1A15xx).
 //
 // The protocol lives in the native library libble-sdk-native-lib.so; the connect flow, TimeSync
-// handshake and value decoders below are reconstructed from its disassembly and the documented
-// protocol. Reading (telemetry, config, tuning report, every readable characteristic) is proven-safe.
-// The limiter write (MotorTuning MaxSpeed -> DA1A160D) is NEVER sent by the vendor app and no controller
-// has confirmed it accepts a written value, so writing stays disabled here (WRITE_ENABLED = false).
-// This is a read-and-test instrument. Nothing here invents a UUID, opcode, offset or scale.
+// handshake, value decoders and the documented write frames below are reconstructed from its
+// disassembly. Reading (telemetry, config, tuning report, every readable characteristic) is proven-safe.
+// Writes are functional: SetSetting (comfort functions -> DA1A1A03) and SetMotorTuning (MaxSpeed/SpeedCut
+// -> DA1A160D) are built from the documented SDK frames and sent on request. The vendor app never sends
+// the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
+// real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v28';
+const BUILD = 'v29';
 
-// Master gate for every lock/unlock/tuning write. Reading is never gated by this. If a real device
-// ever confirms the controller accepts a written MaxSpeed, flip this one line to re-enable the writes.
-const WRITE_ENABLED = false;
+// Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
+// are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
+const WRITE_ENABLED = true;
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
@@ -39,6 +40,7 @@ function applyLang() {
   setStatus(statusState);
   renderSettings();
   renderAdvanced();
+  buildSettingsWrite();
   try { localStorage.setItem('vmnu_lang', lang); } catch (e) {}
 }
 function initLangSwitch() {
@@ -80,7 +82,13 @@ function redact(text) {
   s = s.replace(/\b[0-9A-Fa-f]{16,}\b/g, '[redacted-hex]');
   return s;
 }
-function anonymize(s) { return publicLog ? redact(s) : String(s); }
+// Anonymize a stored raw line for display/copy/save: mask driver-marked sensitive spans (\x01..\x01,
+// e.g. a userId or serial) and run the generic redaction - but ONLY when Public Log is on. Off = the
+// full raw line (local debugging only, do not share). Same anonymizer as lb-tool-web.
+function anonymize(s) {
+  if (publicLog === false) return String(s).replace(/\x01/g, '');
+  return redact(String(s).replace(/\x01[^\x01]*\x01/g, 'XX').replace(/\x01/g, ''));
+}
 function log(msg, cls) {
   const raw = '[' + ts() + '] ' + msg;
   logBuffer.push({ raw: raw, cls: cls || '' });
@@ -153,7 +161,8 @@ const UUID_SUFFIX = '-d532-4285-be94-b07a3e11a098';
 function u(short16) { return 'da1a' + short16.toLowerCase() + UUID_SUFFIX; }
 const SERVICE = u('1500');            // GPST service of the newer VMAX line
 const TUNE_NOTIFY = u('160c');        // MotorTuning report (ReadValueForCharacteristic)
-const TUNE_WRITE = u('160d');         // MotorTuning write (WriteMotorTuning) - gated, never fired here
+const TUNE_WRITE = u('160d');         // MotorTuning write (WriteMotorTuning) - functional, sent on request
+const SETTING_WRITE = u('1a03');      // SetSetting write (comfort functions) for KingmeterVmax
 const TIMESYNC_WRITE = u('1607');     // handshake: WriteTimeSync sends 6 time bytes here
 // To reach a service it must be in optionalServices. iOS WebKit (Bluefy) is stricter than desktop
 // Chrome: it rejects requestDevice when the list holds raw numeric UUIDs or standard services, so we
@@ -263,7 +272,10 @@ function canReadFrame(addr, len) { const pl = paramReadPayload(addr, len); const
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
 const MT_NAMES = ['MaxPower', 'AssistFactor', 'DynamicFactor', 'SpeedCut', 'MaxSpeed', 'Cadence', 'TorqueHuman', 'BrakeCombined', 'BrakeStatic', 'FreePushingTime', 'SupportGain'];
 
-// Write frame per GPSTProtocolHandler::WriteMotorTuning (kept for the day the write is proven; gated off).
+// Write frame per GPSTProtocolHandler::WriteMotorTuning (0x9e310): byte 0 = profile index, then one byte
+// per ordinal 0..maxSetOrdinal in ascending order, 0xFF for a gap or a leading unset ordinal, no checksum.
+// So MaxSpeed (ordinal 4) alone -> [idx, FF, FF, FF, FF, MaxSpeed]; SpeedCut (3) + MaxSpeed (4) ->
+// [idx, FF, FF, FF, SpeedCut, MaxSpeed]. Values are raw bytes (cap 250 for MaxSpeed, 100 for the rest).
 function motorTuningFrame(idx, entries) {
   const byType = {}; let maxType = -1;
   entries.forEach(e => { byType[e.type] = e.value & 0xFF; if (e.type > maxType) maxType = e.type; });
@@ -271,6 +283,29 @@ function motorTuningFrame(idx, entries) {
   for (let ty = 0; ty <= maxType; ty++) out.push((ty in byType) ? byType[ty] : 0xFF);
   return new Uint8Array(out);
 }
+
+// SetSetting write per GPSTProtocolHandler::SetSetting (0x9d2ac): the comfort functions the vendor app
+// itself writes. For KingmeterVmax (protocol ordinal 3) the message goes to DA1A1A03 as
+// [prefix w24][keycode w22][value code], one value byte (ProtocolVersion >= 0x0b). The value byte is a
+// fixed name-code from the SDK, NOT a list index (e.g. LightStatus Auto = 3, not 2). Prefix is 0x60,
+// except the battery modes which use 0x8f. All keycodes/codes are from the documented SettingType table.
+const SETTINGS = [
+  { key: 'light',       name: 'LightStatus',                prefix: 0x60, kc: 0x07, opts: [['off', 0], ['on', 1], ['auto', 3]] },
+  { key: 'autolight',   name: 'AutoLight',                  prefix: 0x60, kc: 0x06, opts: [['off', 0], ['on', 1]] },
+  { key: 'assist',      name: 'AssistLevelChange',          prefix: 0x60, kc: 0x08, opts: [['nochange', 0], ['higher', 1], ['lower', 2]] },
+  { key: 'startmode',   name: 'InitialAssistMode',          prefix: 0x60, kc: 0x0a, opts: [['zerostart', 0], ['kickstart', 1]] },
+  { key: 'walk',        name: 'WalkAssist',                 prefix: 0x60, kc: 0x02, opts: [['off', 0], ['on', 1]] },
+  { key: 'beeper',      name: 'Beeper',                     prefix: 0x60, kc: 0x04, opts: [['off', 0], ['on', 1]] },
+  { key: 'units',       name: 'DisplayUnits',               prefix: 0x60, kc: 0x03, opts: [['metric', 0], ['imperial', 1]] },
+  { key: 'center',      name: 'CenterButton',               prefix: 0x60, kc: 0x10, opts: [['extended', 0], ['reduced', 1]] },
+  { key: 'stealth',     name: 'StealthMode',                prefix: 0x60, kc: 0x52, opts: [['off', 0], ['on', 1]] },
+  { key: 'tripreset',   name: 'TripReset',                  prefix: 0x60, kc: 0x0c, opts: [['nochange', 0], ['reset', 1]] },
+  { key: 'battmain',    name: 'MainBatteryStorageMode',     prefix: 0x8f, kc: 0xfc, opts: [['off', 0], ['on', 1]] },
+  { key: 'battmainsc',  name: 'MainBatterySoftChargeMode',  prefix: 0x8f, kc: 0xfb, opts: [['off', 0], ['on', 1]] },
+  { key: 'battext',     name: 'ExtendedBatteryStorageMode', prefix: 0x8f, kc: 0xfa, opts: [['off', 0], ['on', 1]] },
+  { key: 'battextsc',   name: 'ExtendedBatterySoftChargeMode', prefix: 0x8f, kc: 0xfd, opts: [['off', 0], ['on', 1]] },
+];
+function settingFrame(prefix, keycode, code) { return new Uint8Array([prefix & 0xFF, keycode & 0xFF, code & 0xFF]); }
 
 // Handshake, same as the app: WriteTimeSync sends 6 bytes [year-2000, month, day, hour, minute, second]
 // to DA1A1607 once after connect. This is the ONE write the tool keeps - the required connect step.
@@ -388,7 +423,7 @@ Object.keys(SERIAL_NAMES).forEach(su => {
 
 // ---- BLE state -------------------------------------------------------------
 let device = null, server = null;
-let tuneWriteChar = null, tuneNotifyChar = null, timeSyncChar = null;
+let tuneWriteChar = null, tuneNotifyChar = null, timeSyncChar = null, settingWriteChar = null;
 const notifyChars = [];
 const readChars = [];
 let connected = false, connecting = false;
@@ -430,7 +465,7 @@ async function pickAndConnect() {
 
 async function enumerateGatt() {
   const out = [];
-  notifyChars.length = 0; readChars.length = 0; tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; lastFrame = {};
+  notifyChars.length = 0; readChars.length = 0; tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; settingWriteChar = null; lastFrame = {};
   let services = [];
   try { services = await server.getPrimaryServices(); } catch (e) { log('getPrimaryServices failed: ' + e, 'log-err'); }
   for (const svc of services) {
@@ -445,6 +480,7 @@ async function enumerateGatt() {
       if (cu === TUNE_WRITE) tuneWriteChar = c;
       if (cu === TUNE_NOTIFY) tuneNotifyChar = c;
       if (cu === TIMESYNC_WRITE) timeSyncChar = c;
+      if (cu === SETTING_WRITE) settingWriteChar = c;
       if (p.read) readChars.push(c);
       if (p.notify || p.indicate) {
         try { await c.startNotifications(); c.addEventListener('characteristicvaluechanged', onNotify); notifyChars.push(c); }
@@ -454,7 +490,7 @@ async function enumerateGatt() {
   }
   const el = $('chars'); if (el) el.textContent = out.join('\n');
   log('characteristics discovered: ' + out.filter(l => l.startsWith('  chr')).length + ', notify-subscribed: ' + notifyChars.length, 'log-ok');
-  log('tuning report ' + (tuneNotifyChar ? 'FOUND (160C)' : 'not found') + ', timesync ' + (timeSyncChar ? 'FOUND (1607)' : 'not found'));
+  log('tuning report ' + (tuneNotifyChar ? 'FOUND (160C)' : 'not found') + ', tuning write ' + (tuneWriteChar ? 'FOUND (160D)' : 'not found') + ', setting write ' + (settingWriteChar ? 'FOUND (1A03)' : 'not found') + ', timesync ' + (timeSyncChar ? 'FOUND (1607)' : 'not found'));
 }
 
 async function writeTimeSync() {
@@ -621,27 +657,47 @@ async function writeRaw(char, bytes, label) {
   } catch (e) { log('write failed (' + label + '): ' + e, 'log-err'); return false; }
 }
 
-// Limiter write - kept for the day a real device proves it, but hard-gated behind WRITE_ENABLED. While
-// WRITE_ENABLED is false the buttons stay disabled and this never fires.
+// MotorTuning write (SetMotorTuning -> DA1A160D). Functional: builds the documented frame and sends it.
+// MaxSpeed is ordinal 4 (cap 250), SpeedCut ordinal 3 (cap 100). Unlock uses the open MaxSpeed value,
+// lock the legal one; a non-empty SpeedCut field is included in either write. The effect on a real
+// controller is unconfirmed - the vendor app never sends this frame (see the feasibility note).
 async function writeLimiter(open) {
-  if (!WRITE_ENABLED) { log('limiter write is disabled (see the banner)', 'log-err'); return; }
+  if (!WRITE_ENABLED) { log('writes are gated off (WRITE_ENABLED=false)', 'log-err'); return; }
   if (!connected) { log('not connected', 'log-err'); return; }
   if (!tuneWriteChar) { log('MotorTuning write (DA1A160D) not present on this scooter', 'log-err'); try { alert(t('tuneUnavail')); } catch (_) {} return; }
   const idx = clampInt($('idx-in').value, 0, 7, 0);
   const val = open ? clampInt($('open-in').value, 1, 250, 30) : clampInt($('legal-in').value, 1, 250, 20);
+  const entries = [{ type: MT.MaxSpeed, value: val }];
+  const scRaw = ($('speedcut-in') && $('speedcut-in').value || '').trim();
+  let sc = null;
+  if (scRaw !== '') { sc = clampInt(scRaw, 0, 100, 0); entries.push({ type: MT.SpeedCut, value: sc }); }
   const ok = await confirmDialog(open ? t('confirmOpenBody') : t('confirmLegalBody'));
   if (!ok) return;
-  const frame = motorTuningFrame(idx, [{ type: MT.MaxSpeed, value: val }]);
-  log((open ? 'UNLOCK' : 'LOCK') + ' MaxSpeed=' + val + ' idx=' + idx + ' -> 160D', 'log-ok');
+  const frame = motorTuningFrame(idx, entries);
+  log((open ? 'UNLOCK' : 'LOCK') + ' MaxSpeed=' + val + (sc != null ? ' SpeedCut=' + sc : '') + ' idx=' + idx + ' -> 160D', 'log-ok');
   await writeRaw(tuneWriteChar, frame, '160D MotorTuning');
   await readTune();
+}
+
+// SetSetting write (comfort function -> DA1A1A03). Functional: builds [prefix][keycode][code] and sends
+// it after a confirm. Effect on a real controller is unconfirmed (the vendor app writes these, but no
+// measured device carried DA1A1A03). `entry` is a row of the SETTINGS table, `code` the chosen value byte.
+async function writeSetting(entry, code) {
+  if (!WRITE_ENABLED) { log('writes are gated off (WRITE_ENABLED=false)', 'log-err'); return; }
+  if (!connected) { log('not connected', 'log-err'); return; }
+  if (!settingWriteChar) { log('setting write (DA1A1A03) not present on this scooter', 'log-err'); try { alert(t('setWriteUnavail')); } catch (_) {} return; }
+  const ok = await confirmDialog(t('confirmSettingBody'));
+  if (!ok) return;
+  const frame = settingFrame(entry.prefix, entry.kc, code);
+  log('SetSetting ' + entry.name + '=' + code + ' -> 1A03', 'log-ok');
+  await writeRaw(settingWriteChar, frame, '1A03 SetSetting ' + entry.name);
 }
 
 function clampInt(v, lo, hi, def) { let n = parseInt(v, 10); if (isNaN(n)) n = def; return Math.max(lo, Math.min(hi, n)); }
 
 function onDisconnected() {
   connected = false; connecting = false; server = null; snap = emptySnap();
-  tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; notifyChars.length = 0; lastFrame = {};
+  tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; settingWriteChar = null; notifyChars.length = 0; lastFrame = {};
   setStatus('disconnected'); resetTiles(); setLimiterEnabled(false); updateConnButton();
   renderSettings(); renderAdvanced();
   log('disconnected', 'log-err');
@@ -663,14 +719,35 @@ function updateLimiterButtons() {
   if (bl) bl.textContent = t('btnLegal');
   if (br) br.textContent = t('btnReadTune');
 }
-// Read controls turn on once connected; write controls are AND-gated by WRITE_ENABLED, so connect never
-// un-greys them. While WRITE_ENABLED is false they stay disabled with the .is-blocked style.
+// Read controls turn on once connected; write controls need WRITE_ENABLED plus the write characteristic
+// present on this device. MotorTuning controls key off DA1A160D, setting controls off DA1A1A03. If the
+// characteristic is absent they stay disabled with the .is-blocked style (honest: nothing to write to).
 function setLimiterEnabled(on) {
-  const canWrite = on && WRITE_ENABLED && !!tuneWriteChar;
-  ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) { el.disabled = !canWrite; el.classList.toggle('is-blocked', !canWrite); } });
+  const canTune = on && WRITE_ENABLED && !!tuneWriteChar;
+  ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in', 'speedcut-in'].forEach(id => { const el = $(id); if (el) { el.disabled = !canTune; el.classList.toggle('is-blocked', !canTune); } });
+  const canSet = on && WRITE_ENABLED && !!settingWriteChar;
+  document.querySelectorAll('.sw-ctl').forEach(el => { el.disabled = !canSet; el.classList.toggle('is-blocked', !canSet); });
   const br = $('btn-readtune'); if (br) br.disabled = !(on && !!tuneNotifyChar);
   const ra = $('btn-readall'); if (ra) ra.disabled = !on;
   const cp = $('btn-canprobe'); if (cp) cp.disabled = !on;
+}
+
+// Build the settings-write controls once (a select + Set button per SETTINGS row). Rebuilt on language
+// switch so labels/options follow the language. Enable state is applied by setLimiterEnabled.
+function buildSettingsWrite() {
+  const host = $('settings-write-body'); if (!host) return;
+  host.textContent = '';
+  SETTINGS.forEach(entry => {
+    const row = document.createElement('div'); row.className = 'set-row';
+    const lbl = document.createElement('label'); lbl.textContent = t('set_' + entry.key); row.appendChild(lbl);
+    const sel = document.createElement('select'); sel.className = 'sw-ctl';
+    entry.opts.forEach(([n, code]) => { const o = document.createElement('option'); o.value = String(code); o.textContent = t('set_v_' + n); sel.appendChild(o); });
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'sw-ctl'; btn.textContent = t('btnSet');
+    btn.addEventListener('click', () => writeSetting(entry, parseInt(sel.value, 10) || 0));
+    row.appendChild(sel); row.appendChild(btn);
+    host.appendChild(row);
+  });
+  setLimiterEnabled(connected);
 }
 
 // ---- Settings / Advanced read-only panels ----------------------------------
