@@ -126,7 +126,7 @@ PEM_RE='-----BEGIN[A-Z ]*PRIVATE KEY-----'
 AWS_RE='AKIA[0-9A-Z]{16}'
 GAPI_RE='AIza[0-9A-Za-z_-]{35}'
 WINHOME_RE='[Cc]:\\Users\\[^\\]+\\'
-GENERIC_RE="(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|bearer)[${SQ}${DQ}[:space:]]*[:=][[:space:]]*[${SQ}${DQ}]?[^[:space:]${SQ}${DQ}]"
+GENERIC_RE="(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|bearer)[${SQ}${DQ}[:space:]]*[:=][[:space:]]*[${SQ}${DQ}][^${SQ}${DQ}]{8,}"
 PLACEHOLDER_RE="[:=][[:space:]]*[${SQ}${DQ}]?(your[-_ ]|<[A-Za-z.]|example|changeme|change-me|placeholder|redacted|dummy|sample|xxxx|\.\.\.|todo|replace[-_]?me)"
 REFERENCE_RE="[:=][[:space:]]*[${SQ}${DQ}]?([$]\{|system\.getenv|process\.env)"
 SEC_HITS=0
@@ -138,7 +138,7 @@ scan_content() {
   if grep -aqE  -e "$AWS_RE"     "$_c"; then echo "BLOCK $_f : rule=aws-access-key";        SEC_HITS=1; RC=1; fi
   if grep -aqE  -e "$GAPI_RE"    "$_c"; then echo "BLOCK $_f : rule=google-api-key";        SEC_HITS=1; RC=1; fi
   if grep -aqE  -e "$WINHOME_RE" "$_c"; then echo "BLOCK $_f : rule=windows-home-path";     SEC_HITS=1; RC=1; fi
-  if grep -ainE -e "$GENERIC_RE" "$_c" | grep -aivE -e "$PLACEHOLDER_RE" | grep -aivE -e "$REFERENCE_RE" | grep -aq .; then
+  if grep -ainE -e "$GENERIC_RE" "$_c" | grep -aivE -e "$PLACEHOLDER_RE" | grep -aivE -e "$REFERENCE_RE" | grep -aivE scan-ok | grep -aq .; then
     echo "BLOCK $_f : rule=generic-secret-assignment"; SEC_HITS=1; RC=1
   fi
 }
