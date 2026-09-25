@@ -155,7 +155,7 @@ dialog::backdrop { background: var(--backdrop); }
   border-top: 1px solid var(--line); }
 .doc-foot button { flex: 0 0 auto; padding: 10px 22px; }
 
-/* Shortcut links (Verknuepfungen) - exakt nach trfm-unlock: vertikaler Stack, URL-Box in --value. */
+/* Shortcut links - exactly like trfm-unlock: vertical stack, URL box in --value. */
 .linkrow { display: flex; flex-direction: column; gap: 5px; }
 .linkrow .lbl { color: var(--label); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .copy { margin: 0; font-family: var(--mono); font-size: 11.5px; background: var(--field); border: 1px solid var(--line);
@@ -194,3 +194,43 @@ dialog::backdrop { background: var(--backdrop); }
 
 /* Red warning line inside the "?" help dialog, shown only for risky settings. */
 .help-warn { color: var(--bad); font-weight: 600; margin: 10px 0 0; }
+
+/* Top banner: lock/unlock does not work, reading does. Always visible, not dismissible. */
+.banner { background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 12px; padding: 12px 14px;
+  color: var(--text); font-size: 13px; line-height: 1.5; }
+.banner b { color: var(--bad-strong); }
+.banner a { color: var(--accent); }
+
+/* Red reason line under a gated / disabled control. */
+.danger { color: var(--bad); background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 8px;
+  padding: 9px 11px; font-weight: 700; margin: 0; font-size: 12px; }
+
+/* Collapsible sections (details/summary), matching lb-tool-web/vmax-unlock. */
+details.card { gap: 0; }
+details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary h2 { flex: 1 1 auto; }
+details.card > summary .chev { flex: 0 0 auto; color: var(--muted); font-size: 12px; transition: transform .15s ease; }
+details.card[open] > summary .chev { transform: rotate(90deg); }
+details.card[open] > summary { margin-bottom: 12px; }
+details.card > .sect-body { display: flex; flex-direction: column; gap: 12px; }
+
+/* Log options (public / diagnostic toggles). */
+.log-opts { display: flex; flex-direction: column; gap: 4px; }
+.log-opt { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 5px; margin: 0; }
+.log-opt span { color: var(--label); font-size: 12px; }
+.log-opt .help-btn { margin: 0 5px; }
+.log-opt input[type="checkbox"] { -webkit-appearance: checkbox; appearance: auto; width: 16px; height: 16px;
+  margin: 0; padding: 0; border: 0; border-radius: 0; background: none; }
+
+/* Permanently gated (disabled) write control - greyed, not clickable. */
+.is-blocked, button.is-blocked { opacity: .55 !important; cursor: not-allowed !important; }
+
+/* Read-only settings / advanced rows: label left, value right. */
+.ro-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline;
+  padding: 6px 0; border-bottom: 1px solid var(--line); }
+.ro-row:last-child { border-bottom: 0; }
+.ro-lbl { color: var(--label); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.ro-val { font-family: var(--mono); font-size: 13px; color: var(--value); text-align: right; word-break: break-word; }
+#settings-body:empty, #advanced-body:empty { display: none; }

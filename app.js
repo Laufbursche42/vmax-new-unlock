@@ -1,19 +1,25 @@
 'use strict';
 
-// Laufbursche VMAX new Tool - Web Bluetooth tool for the newer VMAX models
+// Laufbursche VMAX new Tool - Web Bluetooth read/diagnostic tool for the newer VMAX models
 // (VMAX E-Scooter app, GPST protocol KingmeterVmax, GATT family DA1A15xx).
 //
-// Unlike vmax-unlock (ZYD, fully readable in Java) this protocol lives in the native library
-// libble-sdk-native-lib.so. Reconstructed from its disassembly: service DA1A1500, the MotorTuning
-// characteristics (report DA1A160C, write DA1A160D), the TimeSync handshake write to DA1A1607 and the
-// write frame of GPSTProtocolHandler::WriteMotorTuning. The controller's full connection flow is not
-// completely reconstructed, so this tool is first a read and test instrument on your own device.
+// The protocol lives in the native library libble-sdk-native-lib.so; the connect flow, TimeSync
+// handshake and value decoders below are reconstructed from its disassembly and the documented
+// protocol. Reading (telemetry, config, tuning report, every readable characteristic) is proven-safe.
+// The limiter write (MotorTuning MaxSpeed -> DA1A160D) is NEVER sent by the vendor app and no controller
+// has confirmed it accepts a written value, so writing stays disabled here (WRITE_ENABLED = false).
+// This is a read-and-test instrument. Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v23';
+const BUILD = 'v24';
+
+// Master gate for every lock/unlock/tuning write. Reading is never gated by this. If a real device
+// ever confirms the controller accepts a written MaxSpeed, flip this one line to re-enable the writes.
+const WRITE_ENABLED = false;
 
 // ---- Small helpers ---------------------------------------------------------
 function $(id) { return document.getElementById(id); }
 function bytesToHex(b) { return [...b].map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(' '); }
+function ascii(b) { let s = ''; for (const c of b) s += (c >= 32 && c < 127) ? String.fromCharCode(c) : '.'; return s; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ---- i18n ------------------------------------------------------------------
@@ -29,8 +35,10 @@ function applyLang() {
   document.querySelectorAll('#langs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === lang ? 'true' : 'false'));
   const th = $('btn-theme'); if (th) th.title = document.documentElement.getAttribute('data-theme') === 'light' ? t('themeToDark') : t('themeToLight');
   updateConnButton();
-  updateDrosselButtons();
+  updateLimiterButtons();
   setStatus(statusState);
+  renderSettings();
+  renderAdvanced();
   try { localStorage.setItem('vmnu_lang', lang); } catch (e) {}
 }
 function initLangSwitch() {
@@ -50,28 +58,65 @@ function initTheme() {
   const b = $('btn-theme'); if (b) b.addEventListener('click', () => applyTheme(document.documentElement.getAttribute('data-theme') !== 'light'));
 }
 
-// ---- Log -------------------------------------------------------------------
-const logLines = [];
+// ---- Log + redaction -------------------------------------------------------
+// Lines are kept raw in logBuffer so re-render, copy and save use the same anonymized text. Timestamp is
+// [HH:MM:SS.mmm] (millisecond precision, useful for BLE timing). Log strings stay technical English.
+const logBuffer = [];      // { raw, cls }
+let publicLog = true;      // anonymize before display/copy/save (default on)
+let diagLog = false;       // capture everything raw, do not skip repeated notify frames
+let deviceId = '';         // current device id, redacted from a public log
+try { publicLog = localStorage.getItem('vmnu_publiclog') !== '0'; } catch (e) {}
+try { diagLog = localStorage.getItem('vmnu_diaglog') === '1'; } catch (e) {}
+
 function ts() { const d = new Date(); const p = (n, w) => String(n).padStart(w || 2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + p(d.getMilliseconds(), 3); }
-function log(m, cls) {
-  const line = ts() + '  ' + m;
-  logLines.push(line);
+// Mask personal data before a log is shown or shared: the device id, MAC addresses, key/token/serial
+// assignments, and long contiguous hex runs (space-separated frame hex is left readable).
+function redact(text) {
+  let s = String(text);
+  if (deviceId) s = s.split(deviceId).join('[redacted-id]');
+  s = s.replace(/\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b/g, '[redacted-mac]');
+  s = s.replace(/\b(secret|token|key|aes|pwd|password|pin|mac|serial|vin|uid|imei)\b(\s*[:=]\s*)("?)([^\s",]+)\3/gi,
+    (m, k, sep) => k + sep + '[redacted]');
+  s = s.replace(/\b[0-9A-Fa-f]{16,}\b/g, '[redacted-hex]');
+  return s;
+}
+function anonymize(s) { return publicLog ? redact(s) : String(s); }
+function log(msg, cls) {
+  const raw = '[' + ts() + '] ' + msg;
+  logBuffer.push({ raw: raw, cls: cls || '' });
   const el = $('log');
-  if (el) { const span = document.createElement('span'); if (cls) span.className = cls; span.textContent = line + '\n'; el.appendChild(span); el.scrollTop = el.scrollHeight; }
+  if (el) { const span = document.createElement('span'); if (cls) span.className = cls; span.textContent = anonymize(raw) + '\n'; el.appendChild(span); el.scrollTop = el.scrollHeight; }
+}
+function renderLog() {
+  const el = $('log'); if (!el) return;
+  el.textContent = '';
+  logBuffer.forEach(e => { const span = document.createElement('span'); if (e.cls) span.className = e.cls; span.textContent = anonymize(e.raw) + '\n'; el.appendChild(span); });
+  el.scrollTop = el.scrollHeight;
 }
 function logDiagnosticHeader() {
   log('VMAX new Tool build ' + BUILD + '  |  ' + navigator.userAgent);
   log('Web Bluetooth: ' + (navigator.bluetooth ? 'available' : 'MISSING - use Bluefy (iOS) or Chrome/Edge'));
 }
-function clearLog() { logLines.length = 0; const el = $('log'); if (el) el.textContent = ''; logDiagnosticHeader(); log('log cleared'); }
+function clearLog() { logBuffer.length = 0; const el = $('log'); if (el) el.textContent = ''; logDiagnosticHeader(); log(t('logCleared')); }
 function copyLog() {
-  const text = logLines.join('\n');
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => log('log copied')).catch(() => copyFallback(text));
+  const text = logBuffer.map(e => anonymize(e.raw)).join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => log(t('logCopied'), 'log-ok')).catch(() => copyFallback(text));
   else copyFallback(text);
 }
 function copyFallback(text) {
   const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); log('log copied'); } catch (e) { log('copy failed: ' + e); } document.body.removeChild(ta);
+  try { document.execCommand('copy'); log(t('logCopied'), 'log-ok'); } catch (e) { log('copy failed: ' + e, 'log-err'); } document.body.removeChild(ta);
+}
+function saveLog() {
+  const text = logBuffer.map(e => anonymize(e.raw)).join('\n');
+  try {
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'vmax-new-log.txt';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    log(t('logSaved'), 'log-ok');
+  } catch (e) { log('save failed: ' + e, 'log-err'); }
 }
 
 // ---- Status and tiles ------------------------------------------------------
@@ -82,8 +127,15 @@ function setStatus(s) {
   el.setAttribute('data-state', s);
   el.textContent = s === 'connected' ? t('stConnected') : s === 'connecting' ? t('stConnecting') : t('stDisconnected');
 }
+const TILE_IDS = ['t-speed', 't-batt', 't-volt', 't-cur', 't-power', 't-battemp', 't-speedlimit', 't-wheel',
+  't-motor', 't-soh', 't-cells', 't-trip', 't-triptime', 't-total', 't-maxnow', 't-maxcap', 't-idx', 't-fault'];
 function setTile(id, val) { const el = $(id); if (el) el.textContent = (val == null ? '-' : val); }
-function resetTiles() { ['t-speed', 't-maxnow', 't-maxcap', 't-idx', 't-batt', 't-lock'].forEach(id => setTile(id, null)); }
+function resetTiles() { TILE_IDS.forEach(id => setTile(id, null)); }
+
+// Snapshot of the last decoded values, so the Settings and Advanced panels render read-only rows from
+// what the device actually reported. Reset on connect/disconnect.
+function emptySnap() { return { serials: {} }; }
+let snap = emptySnap();
 
 // ---- Models (hint only, the page always connects over DA1A1500) ------------
 const MODELS = ['auto', 'vx2', 'vx4', 'vx8', 'r40', 'r55'];
@@ -101,40 +153,27 @@ const UUID_SUFFIX = '-d532-4285-be94-b07a3e11a098';
 function u(short16) { return 'da1a' + short16.toLowerCase() + UUID_SUFFIX; }
 const SERVICE = u('1500');            // GPST service of the newer VMAX line
 const TUNE_NOTIFY = u('160c');        // MotorTuning report (ReadValueForCharacteristic)
-const TUNE_WRITE = u('160d');         // MotorTuning write (WriteMotorTuning)
+const TUNE_WRITE = u('160d');         // MotorTuning write (WriteMotorTuning) - gated, never fired here
 const TIMESYNC_WRITE = u('1607');     // handshake: WriteTimeSync sends 6 time bytes here
 // To reach a service it must be in optionalServices. iOS WebKit (Bluefy) is stricter than desktop
-// Chrome: it rejects requestDevice outright when the list holds raw numeric UUIDs or standard services
-// such as 0x1800/0x1801, and the picker never opens. So we pass only the canonical 128-bit UUID
-// strings of the DA1A service roots we actually read - the same all-128-bit shape the vmax-unlock tool
-// uses, which connects fine in that same Bluefy. Characteristics live under these roots; listing the
-// roots is enough to enumerate every characteristic after connect.
-// Hylink "Hyena Drive" CAN-over-BLE control service (SDK UUID). On the real VMAX it is very likely
-// remapped into DA1A1900 - add both plus the serial bridge DA1A1700 so the channel can be reached.
+// Chrome: it rejects requestDevice when the list holds raw numeric UUIDs or standard services, so we
+// pass only the canonical 128-bit UUID strings of the DA1A service roots we read. Characteristics live
+// under these roots; listing the roots enumerates every characteristic after connect.
+// The Hyena/PairLink CAN-over-BLE roots are added only for the experimental, read-only CAN probe.
 const HYENA_SERVICE = '48592800-6879-656e-6174-656b2e485550';
-const PAIRLINK_SERVICE = '49d554a6-76b1-11e9-8f9e-2a86e4085a59';   // PairLink BLE-CAN bridge service (fully described in the app code)
+const PAIRLINK_SERVICE = '49d554a6-76b1-11e9-8f9e-2a86e4085a59';   // PairLink BLE-CAN bridge service
 const PAIRLINK_UART = '0000fff0-0000-1000-8000-00805f9b34fb';       // PairLink UART transport variant
 const OPTIONAL_SERVICES = ['1500', '1600', '1700', '1800', '1900', '1a00', '1c00', '1e00', '1f00'].map(u).concat([HYENA_SERVICE, PAIRLINK_SERVICE, PAIRLINK_UART]);
 
-// ---- Hylink HAP v2 (CAN over BLE) ------------------------------------------
-// A packet is [EID 4B big-endian][DLC 1B][payload <=8B] in a 13-byte slot. Controller message IDs are
-// >= 0x20000 and carry bit 31. Parameter read opcode 0x10 (write 0x11 is intentionally not used here).
+// ---- Hylink HAP v2 (CAN over BLE) - experimental, READ-ONLY probe only -----
+// A parameter read is [EID 4B big-endian][DLC 1B][payload]. Controller message IDs carry bit 31.
+// Only the parameter-READ opcode 0x10 is used; parameter-write 0x11 is intentionally never built.
 const HAP_EID_PARAM_READ = 0x80020000;     // 0x20000 | 0x80000000
-const ADDR_MAX_SPEED = 496;                // controller parameter, deci-km/h (value / 10 = km/h)
-function hapCanFrame(eid, payload) {
-  const f = new Uint8Array(13);
-  f[0] = (eid >>> 24) & 0xff; f[1] = (eid >>> 16) & 0xff; f[2] = (eid >>> 8) & 0xff; f[3] = eid & 0xff;   // EID big-endian
-  f[4] = payload.length & 0xff;                                                                           // DLC
-  for (let i = 0; i < payload.length && i < 8; i++) f[5 + i] = payload[i];
-  return f;
-}
 // Parameter-read payload: [0x10][addr 3B little-endian][len 2B little-endian]
 function paramReadPayload(addr, len) {
   return new Uint8Array([0x10, addr & 0xff, (addr >> 8) & 0xff, (addr >> 16) & 0xff, len & 0xff, (len >> 8) & 0xff]);
 }
-// Controller parameters to read once the CAN channel answers - every known address from the reconstructed
-// map (Gesamtanalyse 6.6). The named ones are identified; the rest are read to learn their meaning from the
-// returned value (e.g. address 28 likely a serial string). Length is the controller-side field length.
+// Controller parameters to read once the CAN channel answers (reconstructed address map). Reads only.
 const CAN_PARAMS = [
   { addr: 496, len: 2, name: 'MaxSpeed deci-km/h' },
   { addr: 267, len: 2, name: 'SpeedTable[0]a' },
@@ -158,17 +197,11 @@ const CAN_PARAMS = [
   { addr: 768, len: 2, name: 'addr768 (unknown)' },
   { addr: 770, len: 2, name: 'addr770 (unknown)' },
 ];
-// PairLink CAN-bridge control commands (written to the filter characteristic, not the controller). The
-// bridge forwards nothing until it is enabled - that is why plain reads got no answer. Replicate the
-// app: blacklist the noisy broadcast IDs 1952..1971, then enable (BafangCanConst.APPSetMaintainMile 0xAC).
-const CAN_NOISE_IDS = [0x7a0, 0x7a1, 0x7a2, 0x7a3, 0x7b0, 0x7b1, 0x7b2, 0x7b3];
-function canBlacklistFrame(id) { return new Uint8Array([0xAA, (id >>> 24) & 0xff, (id >>> 16) & 0xff, (id >>> 8) & 0xff, id & 0xff]); }
-const CAN_ENABLE_FRAME = new Uint8Array([0xAC, 0x00, 0x00, 0x00, 0x00]);
 
 // ---- AES-128-ECB (for the PairLink CAN-bridge control handshake) -----------
 // The bridge only forwards CAN after an AES-encrypted control handshake. Crypto is AES-128-ECB, PKCS#7.
 // The fixed control key is hardcoded in the app's native lib (JNI_OnLoad -> aes_set_key): "bafangOTAcontrol".
-// This implementation is byte-verified against Node's crypto aes-128-ecb (encrypt and decrypt).
+// Byte-verified against Node's crypto aes-128-ecb (encrypt and decrypt).
 const AES_FIXED_KEY = new Uint8Array([0x62,0x61,0x66,0x61,0x6e,0x67,0x4f,0x54,0x41,0x63,0x6f,0x6e,0x74,0x72,0x6f,0x6c]);
 const AES_SBOX = (function () {
   const g = new Uint8Array(256), lg = new Uint8Array(256); let a = 1;
@@ -184,32 +217,32 @@ function aesKeyExpansion(key) {
   const w = new Uint8Array(176); w.set(key.subarray(0, 16)); let rc = 0;
   for (let i = 16; i < 176; i += 4) {
     let t0 = w[i-4], t1 = w[i-3], t2 = w[i-2], t3 = w[i-1];
-    if (i % 16 === 0) { const t = t0; t0 = AES_SBOX[t1]; t1 = AES_SBOX[t2]; t2 = AES_SBOX[t3]; t3 = AES_SBOX[t]; t0 ^= AES_RCON[rc++]; }
+    if (i % 16 === 0) { const tt = t0; t0 = AES_SBOX[t1]; t1 = AES_SBOX[t2]; t2 = AES_SBOX[t3]; t3 = AES_SBOX[tt]; t0 ^= AES_RCON[rc++]; }
     w[i] = w[i-16] ^ t0; w[i+1] = w[i-15] ^ t1; w[i+2] = w[i-14] ^ t2; w[i+3] = w[i-13] ^ t3;
   }
   return w;
 }
 function aesMul(a, b) { let r = 0; for (let i = 0; i < 8; i++) { if (b & 1) r ^= a; const hi = a & 0x80; a = (a << 1) & 0xff; if (hi) a ^= 0x1b; b >>= 1; } return r & 0xff; }
 function aesEncBlock(inb, w) {
-  const s = Uint8Array.from(inb.subarray(0, 16)); let t;
+  const s = Uint8Array.from(inb.subarray(0, 16)); let tt;
   for (let i = 0; i < 16; i++) s[i] ^= w[i];
   for (let round = 1; round <= 10; round++) {
     for (let i = 0; i < 16; i++) s[i] = AES_SBOX[s[i]];
-    t = s[1]; s[1] = s[5]; s[5] = s[9]; s[9] = s[13]; s[13] = t;
-    t = s[2]; s[2] = s[10]; s[10] = t; t = s[6]; s[6] = s[14]; s[14] = t;
-    t = s[15]; s[15] = s[11]; s[11] = s[7]; s[7] = s[3]; s[3] = t;
+    tt = s[1]; s[1] = s[5]; s[5] = s[9]; s[9] = s[13]; s[13] = tt;
+    tt = s[2]; s[2] = s[10]; s[10] = tt; tt = s[6]; s[6] = s[14]; s[14] = tt;
+    tt = s[15]; s[15] = s[11]; s[11] = s[7]; s[7] = s[3]; s[3] = tt;
     if (round < 10) for (let c = 0; c < 4; c++) { const o = c*4, a0 = s[o], a1 = s[o+1], a2 = s[o+2], a3 = s[o+3]; s[o] = aesMul(a0,2)^aesMul(a1,3)^a2^a3; s[o+1] = a0^aesMul(a1,2)^aesMul(a2,3)^a3; s[o+2] = a0^a1^aesMul(a2,2)^aesMul(a3,3); s[o+3] = aesMul(a0,3)^a1^a2^aesMul(a3,2); }
     for (let i = 0; i < 16; i++) s[i] ^= w[round*16 + i];
   }
   return s;
 }
 function aesDecBlock(inb, w) {
-  const s = Uint8Array.from(inb.subarray(0, 16)); let t;
+  const s = Uint8Array.from(inb.subarray(0, 16)); let tt;
   for (let i = 0; i < 16; i++) s[i] ^= w[160 + i];
   for (let round = 9; round >= 0; round--) {
-    t = s[13]; s[13] = s[9]; s[9] = s[5]; s[5] = s[1]; s[1] = t;
-    t = s[2]; s[2] = s[10]; s[10] = t; t = s[6]; s[6] = s[14]; s[14] = t;
-    t = s[3]; s[3] = s[7]; s[7] = s[11]; s[11] = s[15]; s[15] = t;
+    tt = s[13]; s[13] = s[9]; s[9] = s[5]; s[5] = s[1]; s[1] = tt;
+    tt = s[2]; s[2] = s[10]; s[10] = tt; tt = s[6]; s[6] = s[14]; s[14] = tt;
+    tt = s[3]; s[3] = s[7]; s[7] = s[11]; s[11] = s[15]; s[15] = tt;
     for (let i = 0; i < 16; i++) s[i] = AES_INV_SBOX[s[i]];
     for (let i = 0; i < 16; i++) s[i] ^= w[round*16 + i];
     if (round > 0) for (let c = 0; c < 4; c++) { const o = c*4, a0 = s[o], a1 = s[o+1], a2 = s[o+2], a3 = s[o+3]; s[o] = aesMul(a0,14)^aesMul(a1,11)^aesMul(a2,13)^aesMul(a3,9); s[o+1] = aesMul(a0,9)^aesMul(a1,14)^aesMul(a2,11)^aesMul(a3,13); s[o+2] = aesMul(a0,13)^aesMul(a1,9)^aesMul(a2,14)^aesMul(a3,11); s[o+3] = aesMul(a0,11)^aesMul(a1,13)^aesMul(a2,9)^aesMul(a3,14); }
@@ -223,15 +256,14 @@ function pkcs7unpad(d) { if (!d.length) return d; const p = d[d.length - 1]; ret
 // gen_cmd_encry: [opcode, ...payload] -> PKCS#7 -> AES-128-ECB with the fixed control key
 function genCmdEncry(opcode, payload) { const body = new Uint8Array(1 + (payload ? payload.length : 0)); body[0] = opcode & 0xff; if (payload) body.set(payload, 1); return aesEcbEnc(AES_FIXED_KEY, pkcs7pad(body)); }
 function randBytes(n) { const a = new Uint8Array(n); try { (self.crypto || window.crypto).getRandomValues(a); } catch (e) { for (let i = 0; i < n; i++) a[i] = (Date.now() + i * 97) & 0xff; } return a; }
-// CAN frame for a parameter read: [EID 4B big-endian][DLC 1B][payload] (no trailing padding)
+// CAN frame for a parameter read: [EID 4B big-endian][DLC 1B][payload]
 function canReadFrame(addr, len) { const pl = paramReadPayload(addr, len); const f = new Uint8Array(5 + pl.length); f[0] = (HAP_EID_PARAM_READ >>> 24) & 0xff; f[1] = (HAP_EID_PARAM_READ >>> 16) & 0xff; f[2] = (HAP_EID_PARAM_READ >>> 8) & 0xff; f[3] = HAP_EID_PARAM_READ & 0xff; f[4] = pl.length & 0xff; f.set(pl, 5); return f; }
 
 // MotorTuningValueType (ordinal) from the SDK
 const MT = { MaxPower: 0, AssistFactor: 1, DynamicFactor: 2, SpeedCut: 3, MaxSpeed: 4 };
 const MT_NAMES = ['MaxPower', 'AssistFactor', 'DynamicFactor', 'SpeedCut', 'MaxSpeed', 'Cadence', 'TorqueHuman', 'BrakeCombined', 'BrakeStatic', 'FreePushingTime', 'SupportGain'];
 
-// Write frame per GPSTProtocolHandler::WriteMotorTuning:
-// byte 0 = profile index, then one value byte per type ordinal, unset types = 0xFF, sorted by type.
+// Write frame per GPSTProtocolHandler::WriteMotorTuning (kept for the day the write is proven; gated off).
 function motorTuningFrame(idx, entries) {
   const byType = {}; let maxType = -1;
   entries.forEach(e => { byType[e.type] = e.value & 0xFF; if (e.type > maxType) maxType = e.type; });
@@ -241,14 +273,15 @@ function motorTuningFrame(idx, entries) {
 }
 
 // Handshake, same as the app: WriteTimeSync sends 6 bytes [year-2000, month, day, hour, minute, second]
-// to DA1A1607 once after connect (from GPSTProtocolHandler::WriteTimeSync, KingmeterVmax path).
+// to DA1A1607 once after connect. This is the ONE write the tool keeps - the required connect step.
 function timeSyncFrame() {
   const d = new Date();
   return new Uint8Array([(d.getFullYear() - 2000) & 0xFF, (d.getMonth() + 1) & 0xFF, d.getDate() & 0xFF, d.getHours() & 0xFF, d.getMinutes() & 0xFF, d.getSeconds() & 0xFF]);
 }
 
-// ---- Notification decoders (byte layout reconstructed from the ReadCharacteristic* parsers) ------
+// ---- Decoders (byte layout reconstructed from the ReadCharacteristic* parsers) -------------------
 // Integers are big-endian except the DA1A1514 error list (little-endian). Sentinels mark "invalid".
+// Values with an unproven physical scale are kept raw and labelled raw - no divisor is invented.
 function u16be(b, o) { return (o + 1 < b.length) ? ((b[o] << 8) | b[o + 1]) : null; }
 function u16le(b, o) { return (o + 1 < b.length) ? (b[o] | (b[o + 1] << 8)) : null; }
 function u32be(b, o) { return (o + 3 < b.length) ? (b[o] * 16777216 + (b[o + 1] << 16) + (b[o + 2] << 8) + b[o + 3]) : null; }
@@ -257,49 +290,101 @@ function inv16(v) { return (v == null || v === 0xFFFF) ? null : v; }
 function inv8(v) { return (v == null || v === 0xFF) ? null : v; }
 function sig16(v) { if (v == null || v === 0x8000) return null; return v >= 0x8000 ? v - 0x10000 : v; }
 function sig8(v) { if (v == null || v === 0x80) return null; return v >= 0x80 ? v - 0x100 : v; }
+// Signed 16-bit temperature, both 0x8000 and 0xFFFF are "not available" sentinels.
+function tsig(b, o) { const v = u16be(b, o); if (v == null || v === 0x8000 || v === 0xFFFF) return null; return v >= 0x8000 ? v - 0x10000 : v; }
 function sh(v) { return v == null ? '-' : v; }
+function tempC(v) { return v == null ? null : (v / 10).toFixed(1); }
+// 16-bit SMART packed date: year=(v>>9)+1970, month=(v>>5)&0xF, day=v&0x1F.
+function smartDate(v) { if (v == null || v === 0xFFFF || v === 0) return null; const y = (v >> 9) + 1970, mo = (v >> 5) & 0xF, da = v & 0x1F; return y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0'); }
 
-// Dispatch table: short UUID -> decoder. Each logs the decoded fields (English, ASCII) and fills tiles.
+// Dispatch table: short UUID -> decoder. Each logs the decoded fields (English, ASCII), fills tiles and
+// updates the snapshot for the Settings/Advanced panels.
 const DECODERS = {
   '160c': decodeTuning,
   '1505': b => {                                             // GPST_SENSORS, live ride data (BikePerformance)
-    const spd = inv16(u16be(b, 6)), mp = inv16(u16be(b, 0)), hp = inv16(u16be(b, 2)), tq = inv16(u16be(b, 4)), cad = inv16(u16be(b, 8)), rng = inv16(u16be(b, 10));
+    const mp = sig16(u16be(b, 0)), hp = sig16(u16be(b, 2)), tq = sig16(u16be(b, 4)), spd = sig16(u16be(b, 6)), cad = sig16(u16be(b, 8)), rng = sig16(u16be(b, 10));
     setTile('t-speed', spd);
     log('  1505 sensors: speed=' + sh(spd) + ' (raw), motorPower=' + sh(mp) + ' W, humanPower=' + sh(hp) + ' W, torque=' + sh(tq) + ', cadence=' + sh(cad) + ' rpm, range=' + sh(rng) + ' km', 'log-ok');
   },
-  '1501': b => {                                             // GPST_INFO, config incl. speed limit
-    const lim = inv16(u16be(b, 4)), wheel = inv16(u16be(b, 2));
-    log('  1501 info: speedLimit=' + (lim != null ? (lim / 10).toFixed(1) : '-') + ' km/h, wheel=' + sh(wheel) + ' mm, assist=' + sh(sig8(u8at(b, 0))) + '..' + sh(sig8(u8at(b, 1))), 'log-ok');
+  '1501': b => {                                             // GPST_INFO, static config incl. speed limit
+    const amin = sig8(u8at(b, 0)), amax = sig8(u8at(b, 1)), wheel = inv16(u16be(b, 2)), lim = inv16(u16be(b, 4));
+    snap.speedLimit = lim != null ? lim / 10 : null; snap.wheel = wheel; snap.assistMin = amin; snap.assistMax = amax;
+    setTile('t-speedlimit', snap.speedLimit != null ? snap.speedLimit.toFixed(1) : null);
+    setTile('t-wheel', wheel);
+    log('  1501 info: speedLimit=' + (lim != null ? (lim / 10).toFixed(1) : '-') + ' km/h, wheel=' + sh(wheel) + ' mm, assist=' + sh(amin) + '..' + sh(amax), 'log-ok');
   },
   '1503': b => {                                             // GPST_MOTOR_INFO
-    log('  1503 motor: nominal=' + sh(inv16(u16be(b, 0))) + ' W, max=' + sh(inv16(u16be(b, 2))) + ' W, peak=' + sh(inv16(u16be(b, 4))) + ' W', 'log-ok');
+    snap.motorNom = inv16(u16be(b, 0)); snap.motorMax = inv16(u16be(b, 2)); snap.motorPeak = inv16(u16be(b, 4));
+    snap.motorCfg = inv8(u8at(b, 6)); snap.assistFacMin = inv16(u16be(b, 7)); snap.assistFacMax = inv16(u16be(b, 9));
+    setTile('t-motor', snap.motorNom != null ? snap.motorNom + '/' + sh(snap.motorMax) : null);
+    log('  1503 motor: nominal=' + sh(snap.motorNom) + ' W, max=' + sh(snap.motorMax) + ' W, peak=' + sh(snap.motorPeak) + ' W, config=' + sh(snap.motorCfg), 'log-ok');
   },
   '1502': b => {                                             // GPST_BATTERY_INFO, BMS spec and health
-    const soh = inv8(u8at(b, 5)), cells = u8at(b, 2), dv = inv16(u16be(b, 8)), cap = inv16(u16be(b, 0)), cyc = inv16(u16be(b, 3));
-    log('  1502 battery: SoH=' + sh(soh) + ' %, cells=' + sh(cells) + ', designVoltage=' + sh(dv) + ' mV, capacity(raw)=' + sh(cap) + ', cycles=' + sh(cyc), 'log-ok');
+    snap.battCap = inv16(u16be(b, 0)); snap.battCells = u8at(b, 2); snap.battCycles = inv16(u16be(b, 3));
+    snap.battSoH = inv8(u8at(b, 5)); snap.battFullChg = inv16(u16be(b, 6)); snap.battDesignV = inv16(u16be(b, 8));
+    snap.battMfgDate = smartDate(u16be(b, 14));
+    setTile('t-soh', snap.battSoH != null ? snap.battSoH + ' %' : null);
+    setTile('t-cells', snap.battCells);
+    log('  1502 battery: SoH=' + sh(snap.battSoH) + ' %, cells=' + sh(snap.battCells) + ', cycles=' + sh(snap.battCycles) + ', designVoltage=' + sh(snap.battDesignV) + ' mV, capacity(raw)=' + sh(snap.battCap) + ', mfgDate=' + (snap.battMfgDate || '-'), 'log-ok');
   },
-  '1509': b => {                                             // GPST_BATTERY_CHG, live battery state (SoC, voltage, current, temp)
-    const soc = inv8(u8at(b, 4)), volt = inv16(u16be(b, 5)), cur = inv16(u16be(b, 0)), tmp = sig16(u16be(b, 2)), pw = inv16(u16be(b, 9));
+  '1509': b => {                                             // GPST_BATTERY_CHG, live battery state
+    const cur = inv16(u16be(b, 0)), tmp = tsig(b, 2), soc = inv8(u8at(b, 4)), volt = inv16(u16be(b, 5)),
+      chg = inv16(u16be(b, 7)), pw = sig16(u16be(b, 9)), rem = inv16(u16be(b, 11));
+    snap.battRem = rem;
     setTile('t-batt', soc != null ? soc + ' %' : null);
-    log('  1509 battery: SoC=' + sh(soc) + ' %, voltage=' + sh(volt) + ' mV, current=' + sh(cur) + ' (raw, scaled), temp=' + (tmp != null ? (tmp / 10).toFixed(1) : '-') + ' C, power=' + sh(pw) + ' W', 'log-ok');
+    setTile('t-volt', volt != null ? volt + ' mV' : null);
+    setTile('t-cur', cur);
+    setTile('t-power', pw != null ? pw + ' W' : null);
+    setTile('t-battemp', tmp != null ? tempC(tmp) + ' C' : null);
+    log('  1509 battery: SoC=' + sh(soc) + ' %, voltage=' + sh(volt) + ' mV, current=' + sh(cur) + ' (raw), chargeCurrent=' + sh(chg) + ' (raw), temp=' + (tmp != null ? tempC(tmp) : '-') + ' C, power=' + sh(pw) + ' W, remCapacity=' + sh(rem) + ' (raw)', 'log-ok');
+  },
+  '150a': b => {                                             // GPST_MOTOR_CHG, live motor
+    snap.mCur = inv16(u16be(b, 0)); snap.mVolt = sig16(u16be(b, 2)); snap.mRpm = sig16(u16be(b, 4)); snap.mTorque = sig16(u16be(b, 6)); snap.mTemp = tsig(b, 8);
+    log('  150A motor live: current=' + sh(snap.mCur) + ', voltage=' + sh(snap.mVolt) + ', rpm=' + sh(snap.mRpm) + ', torque=' + sh(snap.mTorque) + ', temp=' + sh(snap.mTemp) + ' (all raw, engine scale)', 'log-ok');
+  },
+  '1508': b => {                                             // GPST_UPDATE, status (BikeUpdate)
+    const ch = u8at(b, 2); snap.stLight = u8at(b, 0); snap.stScoop = u8at(b, 1); snap.stCharge = (ch == null ? null : (ch & 0x0F));
+    snap.stAssist = u8at(b, 3); snap.stFront = u8at(b, 4); snap.stRear = u8at(b, 5); snap.stPower = u8at(b, 6); snap.stBrake = u8at(b, 7); snap.stCtrlTemp = tsig(b, 9);
+    log('  1508 status: light=' + sh(snap.stLight) + ', scoopMode=' + sh(snap.stScoop) + ', charging=' + sh(snap.stCharge) + ', assistLevel=' + sh(snap.stAssist) + ', gear=' + sh(snap.stFront) + '/' + sh(snap.stRear) + ', power=' + sh(snap.stPower) + ', brakeLight=' + sh(snap.stBrake) + ', ctrlTemp=' + sh(snap.stCtrlTemp) + ' (raw, engine scale)', 'log-ok');
   },
   '150c': b => {                                             // GPST_BATTERY_CELL, BMS per cell
-    const idx = inv8(u8at(b, 0)), mv = inv16(u16be(b, 1)), t = sig16(u16be(b, 3)), tmax = sig16(u16be(b, 5)), tmin = sig16(u16be(b, 7));
-    log('  150C BMS cell ' + sh(idx) + ': ' + sh(mv) + ' mV, temp=' + sh(t) + ' (min ' + sh(tmin) + ', max ' + sh(tmax) + ')', 'log-ok');
+    const idx = inv8(u8at(b, 0)), mv = inv16(u16be(b, 1)), tp = tsig(b, 3), tmax = tsig(b, 5), tmin = tsig(b, 7);
+    log('  150C BMS cell ' + sh(idx) + ': ' + sh(mv) + ' mV, temp=' + sh(tp) + ' (min ' + sh(tmin) + ', max ' + sh(tmax) + ')', 'log-ok');
   },
-  '1506': b => {                                             // GPST_TRIP
-    log('  1506 trip: length(raw)=' + sh(u32be(b, 0)) + ', time=' + sh(u32be(b, 4)) + ' s, odometer(raw)=' + sh(u32be(b, 8)), 'log-ok');
+  '1506': b => {                                             // GPST_TRIP, trip / odometer
+    const len = u32be(b, 0), tm = u32be(b, 4), odo = u32be(b, 8), odt = u32be(b, 12);
+    setTile('t-trip', len); setTile('t-triptime', tm != null ? tm + ' s' : null); setTile('t-total', odo);
+    log('  1506 trip: length(raw)=' + sh(len) + ', time=' + sh(tm) + ' s, odometer(raw)=' + sh(odo) + ', odometerTime=' + sh(odt) + ' s', 'log-ok');
   },
-  '1514': b => {                                             // GPST_ERROR, little-endian code list
-    const codes = []; for (let o = 2; o + 1 < b.length; o += 2) { const c = u16le(b, o); if (c) codes.push('0x' + c.toString(16)); }
+  '1507': b => {                                             // GPST_TOTAL_TRIP, lifetime
+    snap.totTime = u32be(b, 0); snap.totMax = sig16(u16be(b, 4)); snap.totAvg = sig16(u16be(b, 6));
+    log('  1507 total: totalTime=' + sh(snap.totTime) + ' s, maxSpeed=' + sh(snap.totMax) + ' (raw), avgSpeed=' + sh(snap.totAvg) + ' (raw)', 'log-ok');
+  },
+  '150d': b => {                                             // GPST_STATS, session stats (fixed head only)
+    snap.stMax = sig16(u16be(b, 0)); snap.stAvg = sig16(u16be(b, 2)); snap.stMaxCad = sig16(u16be(b, 4)); snap.stAvgCad = sig16(u16be(b, 6));
+    log('  150D stats: maxSpeed=' + sh(snap.stMax) + ' (raw), avgSpeed=' + sh(snap.stAvg) + ' (raw), maxCadence=' + sh(snap.stMaxCad) + ', avgCadence=' + sh(snap.stAvgCad), 'log-ok');
+  },
+  '1504': b => {                                             // GPST_FIRMWAREID (ASCII fields; layout not offset-fixed)
+    snap.firmware = ascii(b).replace(/\.+/g, ' ').trim();
+    log('  1504 firmwareId: "' + ascii(b) + '"', 'log-ok');
+  },
+  '1514': b => {                                             // GPST_ERROR, little-endian code list from offset 0
+    const codes = []; for (let o = 0; o + 1 < b.length; o += 2) { const c = u16le(b, o); if (c) codes.push('0x' + c.toString(16)); }
+    snap.errors = codes;
+    setTile('t-fault', codes.length ? codes.length : '0');
     log('  1514 errors: ' + (codes.length ? codes.join(', ') : 'none'), codes.length ? 'log-err' : 'log-ok');
   },
-  '1f01': b => {                                             // command response, incl. immobiliser (Wegfahrsperre) status
+  '1f01': b => {                                             // command response, incl. immobiliser state (read-only, Sachs-gated; not a VMAX fact)
     const op = u16be(b, 0), lk = u8at(b, 3);
-    if (op === 1) { const en = lk === 0 ? 'unlocked' : lk === 1 ? 'locked' : 'unknown'; setTile('t-lock', lang === 'de' ? (lk === 0 ? 'entsperrt' : lk === 1 ? 'gesperrt' : 'unbekannt') : en); log('  1F01 immobiliser: ' + en, 'log-ok'); }
+    if (op === 1) { const en = lk === 0 ? 'unlocked' : lk === 1 ? 'locked' : 'unknown'; log('  1F01 command reply: lock state = ' + en + ' (not available on the VMAX line)', 'log-ok'); }
     else log('  1F01 command response opId=' + op, 'log-ok');
   },
 };
+// Serial group DA1A150E-1512: ASCII strings. Store by role name; keep them out of tiles.
+const SERIAL_NAMES = { '150e': 'Serial', '150f': 'Display', '1510': 'Battery', '1511': 'Controller', '1512': 'Motor' };
+Object.keys(SERIAL_NAMES).forEach(su => {
+  DECODERS[su] = b => { const s = ascii(b).replace(/\.+/g, '').trim(); snap.serials[SERIAL_NAMES[su]] = s; log('  ' + su.toUpperCase() + ' ' + SERIAL_NAMES[su] + ' serial: ' + s, 'log-ok'); };
+});
 
 // ---- BLE state -------------------------------------------------------------
 let device = null, server = null;
@@ -307,6 +392,7 @@ let tuneWriteChar = null, tuneNotifyChar = null, timeSyncChar = null;
 const notifyChars = [];
 const readChars = [];
 let connected = false, connecting = false;
+let lastFrame = {};
 
 // iOS WebKit (Bluefy) reports UUIDs uppercase, desktop Chrome lowercase - normalize before matching.
 function shortUuid(uuid) { uuid = String(uuid).toLowerCase(); const m = /^0000([0-9a-f]{4})-/.exec(uuid); if (m) return m[1]; const n = /^da1a([0-9a-f]{4})-/.exec(uuid); return n ? n[1] : uuid; }
@@ -314,10 +400,11 @@ function shortUuid(uuid) { uuid = String(uuid).toLowerCase(); const m = /^0000([
 async function pickAndConnect() {
   if (!navigator.bluetooth) { log('Web Bluetooth not available in this browser', 'log-err'); try { alert(t('noBleAlert')); } catch (e) {} return; }
   if (connecting || connected) return;
-  connecting = true; setStatus('connecting'); updateConnButton();
+  connecting = true; snap = emptySnap(); setStatus('connecting'); updateConnButton();
   try {
     log('requesting device (pick your VMAX)...', 'log-tx');
     device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: OPTIONAL_SERVICES });
+    deviceId = device.id || '';
     log('device: ' + (device.name || '(no name)') + '  id=' + device.id);
     $('devinfo').textContent = (device.name || '(no name)');
     device.addEventListener('gattserverdisconnected', onDisconnected);
@@ -326,18 +413,16 @@ async function pickAndConnect() {
     await enumerateGatt();
     await writeTimeSync();     // handshake, like the app does after connect
     connected = true; connecting = false; setStatus('connected');
-    updateConnButton(); setDrosselEnabled(true); updateTuneNote();
-    if (!tuneWriteChar) log('MotorTuning write (DA1A160D) not present on this scooter - reading and live values work, but the limiter cannot be written here', 'log-err');
+    updateConnButton(); setLimiterEnabled(true);
     await readAll();     // snapshot the read-only config (incl. 1501 speed limit) right after connect
   } catch (e) {
     connecting = false; setStatus('disconnected'); updateConnButton();
     const msg = (e && e.message) ? e.message : String(e);
     const name = (e && e.name) ? e.name : '';
     log('connect failed: ' + (name ? name + ': ' : '') + msg, 'log-err');
-    // Make the failure visible: on iOS/Bluefy the picker error is otherwise silent.
     if (/cancel/i.test(msg)) return;             // genuine user cancel: stay quiet
     let text;
-    if (name === 'NotFoundError') text = t('connectNoDevice');   // no device / bluetooth off / permission
+    if (name === 'NotFoundError') text = t('connectNoDevice');
     else text = t('connectErr') + (name ? name + ': ' : '') + msg;
     try { alert(text); } catch (_) {}
   }
@@ -369,7 +454,7 @@ async function enumerateGatt() {
   }
   const el = $('chars'); if (el) el.textContent = out.join('\n');
   log('characteristics discovered: ' + out.filter(l => l.startsWith('  chr')).length + ', notify-subscribed: ' + notifyChars.length, 'log-ok');
-  log('tuning write ' + (tuneWriteChar ? 'FOUND (160D)' : 'not found') + ', tuning notify ' + (tuneNotifyChar ? 'FOUND (160C)' : 'not found') + ', timesync ' + (timeSyncChar ? 'FOUND (1607)' : 'not found'));
+  log('tuning report ' + (tuneNotifyChar ? 'FOUND (160C)' : 'not found') + ', timesync ' + (timeSyncChar ? 'FOUND (1607)' : 'not found'));
 }
 
 async function writeTimeSync() {
@@ -377,9 +462,8 @@ async function writeTimeSync() {
   await writeRaw(timeSyncChar, timeSyncFrame(), '1607 TimeSync (handshake)');
 }
 
-// Read every readable characteristic once. This surfaces the read-only config that notifications never
-// push - above all DA1A1501 with the speed limit - so we can find where the limiter lives on models that
-// have no MotorTuning characteristic. Reading is safe: it never changes anything on the scooter.
+// Read every readable characteristic once. Surfaces the read-only config that notifications never push
+// (above all DA1A1501 with the speed limit). Reading is safe: it never changes anything on the scooter.
 async function readAll() {
   if (!connected) { log('not connected', 'log-err'); return; }
   log('reading all ' + readChars.length + ' readable characteristics...', 'log-tx');
@@ -389,18 +473,19 @@ async function readAll() {
       const v = await c.readValue();
       const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
       const hex = bytesToHex(bytes);
-      log('RD ' + su + '  ' + hex, 'log-rx');
-      lastFrame[su] = hex;     // remember it so the near-instant identical notification is not logged twice
+      log('RX ' + su + '  ' + hex, 'log-rx');
+      lastFrame[su] = hex;
       const dec = DECODERS[su];
       if (dec) { try { dec(bytes); } catch (e) { log('  decode ' + su + ' failed: ' + e, 'log-err'); } }
     } catch (e) { log('  read ' + su + ' failed: ' + e, 'log-err'); }
   }
+  renderSettings(); renderAdvanced();
   log('read all done', 'log-ok');
 }
 
-// CAN probe: send a HAP v2 parameter-read for the speed-limit address over the Hyena/CAN service and
-// let the raw response frames show up on the CAN notify characteristic (ISO-TP segmented). This only
-// requests a value - it writes nothing to the scooter's configuration.
+// CAN probe: experimental, READ-ONLY. Sends a HAP v2 parameter-READ for the speed-limit address over the
+// Hyena/CAN bridge and lets the raw responses show in the log. It requests values only - it writes
+// nothing to the scooter's configuration. On real hardware this bridge often does not answer at all.
 async function probeSpeedLimit() {
   if (!connected || !server) { log('not connected', 'log-err'); return; }
   let svc = null;
@@ -409,7 +494,7 @@ async function probeSpeedLimit() {
     log('CAN: services on device: ' + services.map(s => s.uuid).join(', '), 'log-tx');
     let pl = null, hy = null, da = null;
     for (const s of services) { const su = String(s.uuid).toLowerCase(); if (su === PAIRLINK_SERVICE) pl = s; else if (su === HYENA_SERVICE) hy = s; else if (/^da1a1900-/.test(su)) da = s; }
-    svc = pl || hy || da;   // prefer the code-documented PairLink service over the guessed DA1A1900
+    svc = pl || hy || da;
   } catch (e) { log('CAN: service scan failed: ' + e, 'log-err'); return; }
   if (!svc) { log('CAN: no CAN bridge service found (PairLink 49d554a6 / Hyena 48592800 / DA1A1900)', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
   log('CAN: using service ' + svc.uuid, 'log-ok');
@@ -421,8 +506,6 @@ async function probeSpeedLimit() {
   if (!writeChars.length) { log('CAN: no writable characteristic in the CAN service', 'log-err'); try { alert(t('canNotFound')); } catch (_) {} return; }
   log('CAN: write=' + writeChars.map(c => shortUuid(c.uuid)).join(',') + ' notify=' + notifyChars2.map(c => shortUuid(c.uuid)).join(','), 'log-tx');
 
-  // We do not know which characteristic carries the control channel, so listen for the decrypted reply on
-  // every notify characteristic of the service. Each incoming frame is decrypted with the fixed key.
   let anyResolve = null; const anyQ = [];
   const onAny = ev => {
     const dv = ev.target.value; const raw = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
@@ -467,24 +550,8 @@ async function probeSpeedLimit() {
       }
       await sleep(1500);
     }
-    // Maximum yield per run: re-read every readable characteristic (catch any change the writes cause) and
-    // keep listening on all notify characteristics a few seconds for any late or asynchronous answer.
-    log('CAN: re-reading all readable characteristics and dumping the DA1A1802 firmware-info fields', 'log-tx');
+    log('CAN: re-reading all readable characteristics', 'log-tx');
     await readAll();
-    // DA1A1802 rotates through firmware-info fields on each read (01 model, 02 firmware version, ...).
-    // Iterate it to dump every field - one of them may carry the module id the firmware API needs.
-    const fwInfo = readChars.find(c => String(shortUuid(c.uuid)).toLowerCase() === '1802');
-    if (fwInfo) {
-      log('CAN: iterating DA1A1802 (rotating fields - model, firmware, maybe a module id)', 'log-tx');
-      for (let k = 0; k < 12; k++) {
-        try {
-          const v = await fwInfo.readValue(); const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-          let asc = ''; for (const ch of b) asc += (ch >= 32 && ch < 127) ? String.fromCharCode(ch) : '.';
-          log('  1802[' + k + '] ' + bytesToHex(b) + '  "' + asc + '"', 'log-rx');
-        } catch (e) { log('  1802 read failed: ' + e, 'log-err'); break; }
-        await sleep(250);
-      }
-    }
     await sleep(3000);   // listen a bit more for any late traffic on any notify characteristic
     log('CAN: full sweep done', 'log-ok');
   } finally {
@@ -492,22 +559,21 @@ async function probeSpeedLimit() {
   }
 }
 
-let lastFrame = {};
 function onNotify(ev) {
   const dv = ev.target.value;
   const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
   const su = String(shortUuid(ev.target.uuid)).toLowerCase();
   const hex = bytesToHex(bytes);
-  if (lastFrame[su] === hex) return;    // same frame as last time: skip so the log stays readable
+  if (!diagLog && lastFrame[su] === hex) return;    // same frame as last time: skip so the log stays readable (unless diag)
   lastFrame[su] = hex;
   log('RX ' + su + '  ' + hex, 'log-rx');
   const dec = DECODERS[su];
-  if (dec) { try { dec(bytes); } catch (e) { log('  decode ' + su + ' failed: ' + e, 'log-err'); } }
+  if (dec) { try { dec(bytes); renderSettings(); renderAdvanced(); } catch (e) { log('  decode ' + su + ' failed: ' + e, 'log-err'); } }
 }
 
 // MotorTuning report (DA1A160C). Format from GPSTProtocolHandler::ReadCharacteristicMotorTuning:
 // FD <one value byte per tuning ordinal, 0xFF = unset> [FD ...] FE. Byte position = ordinal, value = byte.
-// MaxSpeed (ordinal 4) has a fixed SDK cap of 250, the other types 100.
+// MaxSpeed (ordinal 4) has a fixed SDK cap of 250, the other types 100. Reading this is safe.
 function decodeTuning(bytes) {
   const b = [...bytes];
   const records = [];
@@ -526,8 +592,10 @@ function decodeTuning(bytes) {
     vals.forEach((v, ord) => { if (v !== 0xFF) parts.push((MT_NAMES[ord] || ('T' + ord)) + '=' + v); });
     log('  160C profile ' + (r + 1) + ': ' + (parts.join(', ') || '(all unset)'), 'log-ok');
   });
+  snap.tuning = records;
   const rec = records[0];
   const ms = (rec.length > MT.MaxSpeed && rec[MT.MaxSpeed] !== 0xFF) ? rec[MT.MaxSpeed] : null;
+  snap.tuneMax = ms; snap.tuneCap = ms != null ? 250 : null; snap.tuneCount = records.length;
   setTile('t-maxnow', ms);
   setTile('t-maxcap', ms != null ? 250 : null);
   setTile('t-idx', records.length);
@@ -535,9 +603,10 @@ function decodeTuning(bytes) {
 
 async function readTune() {
   if (tuneNotifyChar && (tuneNotifyChar.properties || {}).read) {
-    try { const v = await tuneNotifyChar.readValue(); const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength); log('RX 160C (read)  ' + bytesToHex(b), 'log-rx'); decodeTuning(b); return; }
+    try { const v = await tuneNotifyChar.readValue(); const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength); log('RX 160C (read)  ' + bytesToHex(b), 'log-rx'); decodeTuning(b); renderSettings(); renderAdvanced(); return; }
     catch (e) { log('read 160C failed: ' + e, 'log-err'); }
   }
+  if (!tuneNotifyChar) { log(t('tuneUnavail'), 'log-err'); return; }
   log('160C is notify-only, waiting for the scooter to push a MotorTuning frame', 'log-tx');
 }
 
@@ -552,7 +621,10 @@ async function writeRaw(char, bytes, label) {
   } catch (e) { log('write failed (' + label + '): ' + e, 'log-err'); return false; }
 }
 
-async function writeDrossel(open) {
+// Limiter write - kept for the day a real device proves it, but hard-gated behind WRITE_ENABLED. While
+// WRITE_ENABLED is false the buttons stay disabled and this never fires.
+async function writeLimiter(open) {
+  if (!WRITE_ENABLED) { log('limiter write is disabled (see the banner)', 'log-err'); return; }
   if (!connected) { log('not connected', 'log-err'); return; }
   if (!tuneWriteChar) { log('MotorTuning write (DA1A160D) not present on this scooter', 'log-err'); try { alert(t('tuneUnavail')); } catch (_) {} return; }
   const idx = clampInt($('idx-in').value, 0, 7, 0);
@@ -568,9 +640,10 @@ async function writeDrossel(open) {
 function clampInt(v, lo, hi, def) { let n = parseInt(v, 10); if (isNaN(n)) n = def; return Math.max(lo, Math.min(hi, n)); }
 
 function onDisconnected() {
-  connected = false; connecting = false; server = null;
+  connected = false; connecting = false; server = null; snap = emptySnap();
   tuneWriteChar = null; tuneNotifyChar = null; timeSyncChar = null; notifyChars.length = 0; lastFrame = {};
-  setStatus('disconnected'); resetTiles(); setDrosselEnabled(false); updateTuneNote(); updateConnButton();
+  setStatus('disconnected'); resetTiles(); setLimiterEnabled(false); updateConnButton();
+  renderSettings(); renderAdvanced();
   log('disconnected', 'log-err');
 }
 function disconnectBle() {
@@ -584,25 +657,90 @@ function updateConnButton() {
   if (connected) { b.textContent = t('btnDisconnect'); b.dataset.act = 'disconnect'; }
   else { b.textContent = t('btnConnect'); b.dataset.act = 'connect'; }
 }
-function updateDrosselButtons() {
+function updateLimiterButtons() {
   const bo = $('btn-open'), bl = $('btn-legal'), br = $('btn-readtune');
   if (bo) bo.textContent = t('btnOpen');
   if (bl) bl.textContent = t('btnLegal');
   if (br) br.textContent = t('btnReadTune');
 }
-function setDrosselEnabled(on) {
-  const canWrite = on && !!tuneWriteChar;    // write buttons need the MotorTuning write characteristic (160D)
-  const canRead = on && !!tuneNotifyChar;    // read-tune needs the MotorTuning report characteristic (160C)
-  ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) el.disabled = !canWrite; });
-  const br = $('btn-readtune'); if (br) br.disabled = !canRead;
-  const ra = $('btn-readall'); if (ra) ra.disabled = !on;     // read-all works whenever connected
-  const cp = $('btn-canprobe'); if (cp) cp.disabled = !on;    // CAN speed-limit probe, whenever connected
+// Read controls turn on once connected; write controls are AND-gated by WRITE_ENABLED, so connect never
+// un-greys them. While WRITE_ENABLED is false they stay disabled with the .is-blocked style.
+function setLimiterEnabled(on) {
+  const canWrite = on && WRITE_ENABLED && !!tuneWriteChar;
+  ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in'].forEach(id => { const el = $(id); if (el) { el.disabled = !canWrite; el.classList.toggle('is-blocked', !canWrite); } });
+  const br = $('btn-readtune'); if (br) br.disabled = !(on && !!tuneNotifyChar);
+  const ra = $('btn-readall'); if (ra) ra.disabled = !on;
+  const cp = $('btn-canprobe'); if (cp) cp.disabled = !on;
 }
-function updateTuneNote() {
-  const el = $('tune-note'); if (!el) return;
-  const show = connected && !tuneWriteChar;
-  el.hidden = !show;
-  if (show) el.textContent = t('tuneUnavail');
+
+// ---- Settings / Advanced read-only panels ----------------------------------
+function roRow(labelKey, value) {
+  const row = document.createElement('div'); row.className = 'ro-row';
+  const l = document.createElement('span'); l.className = 'ro-lbl'; l.textContent = t(labelKey);
+  const v = document.createElement('span'); v.className = 'ro-val'; v.textContent = (value == null || value === '') ? '-' : value;
+  row.appendChild(l); row.appendChild(v); return row;
+}
+function joinParts(parts) { const p = parts.filter(x => x != null && x !== ''); return p.length ? p.join('  |  ') : null; }
+
+function renderSettings() {
+  const body = $('settings-body'), empty = $('settings-empty'); if (!body) return;
+  body.textContent = '';
+  if (!connected) { if (empty) empty.hidden = false; return; }
+  if (empty) empty.hidden = true;
+  body.appendChild(roRow('lblSetSpeedLimit', snap.speedLimit != null ? snap.speedLimit.toFixed(1) + ' km/h' : null));
+  body.appendChild(roRow('lblSetWheel', snap.wheel != null ? snap.wheel + ' mm' : null));
+  body.appendChild(roRow('lblSetAssist', (snap.assistMin != null || snap.assistMax != null) ? (sh(snap.assistMin) + ' .. ' + sh(snap.assistMax)) : null));
+  body.appendChild(roRow('lblSetMotor', joinParts([
+    snap.motorNom != null ? snap.motorNom + ' W' : null,
+    snap.motorMax != null ? snap.motorMax + ' W' : null,
+    snap.motorPeak != null ? snap.motorPeak + ' W' : null])));
+  body.appendChild(roRow('lblSetBattery', joinParts([
+    snap.battCells != null ? snap.battCells + ' cells' : null,
+    snap.battCycles != null ? snap.battCycles + ' cycles' : null,
+    snap.battSoH != null ? snap.battSoH + ' % SoH' : null])));
+  body.appendChild(roRow('lblSetTuning', snap.tuneMax != null ? (snap.tuneMax + ' / cap ' + sh(snap.tuneCap) + ' / ' + sh(snap.tuneCount) + ' profile(s)') : null));
+}
+
+function renderAdvanced() {
+  const body = $('advanced-body'), empty = $('advanced-empty'); if (!body) return;
+  body.textContent = '';
+  if (!connected) { if (empty) empty.hidden = false; return; }
+  if (empty) empty.hidden = true;
+  // MotorTuning full ordinal decode of the first profile
+  let tuneStr = null;
+  if (snap.tuning && snap.tuning.length) {
+    const parts = []; snap.tuning[0].forEach((v, ord) => { if (v !== 0xFF) parts.push((MT_NAMES[ord] || ('T' + ord)) + '=' + v); });
+    tuneStr = parts.length ? parts.join(', ') : '(all unset)';
+  }
+  body.appendChild(roRow('lblAdvTuning', tuneStr));
+  body.appendChild(roRow('lblAdvBattery', joinParts([
+    snap.battDesignV != null ? snap.battDesignV + ' mV' : null,
+    snap.battCap != null ? 'cap ' + snap.battCap + ' (raw)' : null,
+    snap.battFullChg != null ? 'full ' + snap.battFullChg + ' (raw)' : null,
+    snap.battMfgDate ? 'mfg ' + snap.battMfgDate : null])));
+  const motorLive = joinParts([
+    snap.mCur != null ? 'I ' + snap.mCur : null,
+    snap.mVolt != null ? 'U ' + snap.mVolt : null,
+    snap.mRpm != null ? snap.mRpm + ' rpm' : null,
+    snap.mTemp != null ? 'temp ' + snap.mTemp : null]);
+  body.appendChild(roRow('lblAdvMotorLive', motorLive === null ? null : motorLive + ' (raw)'));
+  body.appendChild(roRow('lblAdvStatus', joinParts([
+    snap.stLight != null ? 'light ' + snap.stLight : null,
+    snap.stCharge != null ? 'charge ' + snap.stCharge : null,
+    snap.stAssist != null ? 'assist ' + snap.stAssist : null,
+    snap.stCtrlTemp != null ? 'ctrlTemp ' + snap.stCtrlTemp + ' (raw)' : null])));
+  body.appendChild(roRow('lblAdvStats', joinParts([
+    snap.stMax != null ? 'max ' + snap.stMax + ' (raw)' : null,
+    snap.stAvg != null ? 'avg ' + snap.stAvg + ' (raw)' : null,
+    snap.stMaxCad != null ? 'maxCad ' + snap.stMaxCad : null])));
+  body.appendChild(roRow('lblAdvTotal', joinParts([
+    snap.totTime != null ? snap.totTime + ' s' : null,
+    snap.totMax != null ? 'max ' + snap.totMax + ' (raw)' : null,
+    snap.totAvg != null ? 'avg ' + snap.totAvg + ' (raw)' : null])));
+  body.appendChild(roRow('lblAdvFirmware', snap.firmware || null));
+  const serials = Object.keys(snap.serials).map(k => k + ': ' + snap.serials[k]).filter(x => x.split(': ')[1]);
+  body.appendChild(roRow('lblAdvSerials', serials.length ? serials.join('  |  ') : null));
+  body.appendChild(roRow('lblAdvErrors', (snap.errors && snap.errors.length) ? snap.errors.join(', ') : 'none'));
 }
 
 // ---- Dialogs ---------------------------------------------------------------
@@ -618,38 +756,37 @@ function confirmDialog(bodyText) {
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   });
 }
-// Third entry, when present, is a doc name shown as a link at the bottom of the help dialog.
-const HELP = { drossel: ['drosselTitle', 'drosselHelp'], disclaimer: ['footDisclaimer', 'disclaimerText'], fwlogin: ['fwTitle', 'fwHelp', 'PRIVACY'] };
+const HELP = {
+  limiter: ['limiterTitle', 'limiterHelp'],
+  disclaimer: ['footDisclaimer', 'disclaimerText'],
+  publiclog: ['publicLogTitle', 'publicLogHelpHtml'],
+  diaglog: ['diagLogTitle', 'diagLogHelpHtml'],
+};
 function openHelp(key) {
   const h = HELP[key]; if (!h) return;
-  $('help-title').textContent = t(h[0]); $('help-body').textContent = t(h[1]);
+  $('help-title').textContent = t(h[0]);
+  const body = $('help-body'); const s = t(h[1]);
+  if (/[<&]/.test(s)) body.innerHTML = s; else body.textContent = s; // scan-ok: our own translation table
   const w = $('help-warn'); if (w) w.hidden = true;
-  const dl = $('help-doclink');
-  if (dl) {
-    if (h[2]) { dl.hidden = false; dl.textContent = t('fwPrivacyLink'); dl.onclick = e => { e.preventDefault(); closeHelp(); openDoc(docFile(h[2]), t('footPrivacy')); }; }
-    else { dl.hidden = true; dl.onclick = null; }
-  }
   const dlg = $('help'); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
 }
 function closeHelp() { const dlg = $('help'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
-// German docs are NAME.de.md, English docs NAME.md (README is language neutral).
+// German docs are NAME.de.md, English docs NAME.md (README is language neutral, GUIDE is GUIDE.<lang>.md).
 function docFile(name) {
   if (name === 'README') return 'README.md';
   if (name === 'GUIDE') return 'GUIDE.' + lang + '.md';
   return lang === 'de' ? name + '.de.md' : name + '.md';
 }
-// Base doc name from an href like LICENSE.de.md / GUIDE.en.md, plus a localized title for it.
 function docBaseName(url) { return url.replace(/[?#].*$/, '').replace(/\.(de|en)\.md$/i, '').replace(/\.md$/i, ''); }
 function docTitleFor(url) { const k = { README: 'footReadme', GUIDE: 'footGuide', LICENSE: 'footLicense', PRIVACY: 'footPrivacy', TRADEMARKS: 'footTrademarks' }[docBaseName(url)]; return k ? t(k) : docBaseName(url); }
 async function openDoc(file, title) {
-  const dlg = $('doc'); $('doc-title').textContent = title; $('doc-body').textContent = lang === 'de' ? 'lädt...' : 'loading...';
+  const dlg = $('doc'); $('doc-title').textContent = title; $('doc-body').textContent = t('docLoading');
   if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
   try { const r = await fetch(file); const md = await r.text(); $('doc-body').innerHTML = renderMd(md); $('doc-body').scrollTop = 0; } // scan-ok: markdown of our own documents, renderMd escapes first
-  catch (e) { $('doc-body').textContent = (lang === 'de' ? 'Konnte nicht laden: ' : 'Could not load: ') + file + ' (' + e + ')'; }
+  catch (e) { $('doc-body').textContent = t('docLoadErr') + file + ' (' + e + ')'; }
 }
 function renderMd(md) {
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  // Fenced code blocks out first, else the ``` pair as inline code.
   const blocks = [];
   const stashed = md.replace(/```[^\n]*\n([\s\S]*?)```/g, (m, code) => {
     blocks.push('<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
@@ -666,13 +803,12 @@ function renderMd(md) {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url) => {
       if (/^(https?:)?\/\//i.test(url) || /^mailto:/i.test(url)) return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
       if (/^#/.test(url)) return '<a href="#" data-anchor="' + url + '">' + text + '</a>';
-      if (/\.md(?:[?#].*)?$/i.test(url)) return '<a href="#" data-doclink="' + url + '">' + text + '</a>';  // stay in the modal
+      if (/\.md(?:[?#].*)?$/i.test(url)) return '<a href="#" data-doclink="' + url + '">' + text + '</a>';
       return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
     })
     .replace(/\n{2,}/g, '</p><p>')
     .replace(/\n/g, '<br>')
     .replace(/^/, '<p>').replace(/$/, '</p>');
-  // Reinsert code blocks; drop the paragraph wrapper when a block sits alone in one.
   return html
     .replace(/<p>(\x00B\d+\x00)<\/p>/g, '$1')
     .replace(/\x00B(\d+)\x00/g, (m, i) => blocks[+i]);
@@ -691,67 +827,6 @@ async function scanAllDevicesDiagnostic() {
   } catch (e) { log('scan failed: ' + e, 'log-err'); }
 }
 
-// ---- Firmware fetch (vendor cloud, optional and experimental) --------------
-// Independent of Bluetooth. It talks only to the vendor host api.gpstuner.com, the same backend the
-// official app's firmware code uses. There is no login here: to try it you paste your own access token
-// and your device uuid; both go to that host over HTTPS and nowhere else, nothing reaches the developer.
-// It runs only when you fill the fields and tap a button. The vendor removed the endpoint the current
-// official app calls, and the still-live endpoint only answers for a uuid its registry knows, so this
-// usually returns "Invalid uuid". See PRIVACY.
-const FW_BASE = 'https://api.gpstuner.com';
-// Mask the pasted access token before it is shown or copied, so a pasted firmware log is safe to share:
-// token-like fields are redacted, and the literal token value from the input field is redacted too.
-function fwMask(s) {
-  s = String(s).replace(/("(?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|jwt|bearer)"\s*:\s*")[^"]{6,}(")/gi, '$1***$2');
-  let tok = ''; try { tok = ($('fw-token') && $('fw-token').value) || ''; } catch (e) {}
-  if (tok && tok.length > 8) s = s.split(tok).join('***TOKEN***');
-  return s;
-}
-function fwOut(s) { const el = $('fw-out'); if (el) { el.textContent += fwMask(s) + '\n'; el.scrollTop = el.scrollHeight; } }
-function fwCopy() {
-  const el = $('fw-out'); const text = el ? el.textContent : '';   // already masked on the way in
-  const done = () => fwOut(t('fwCopied'));
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => { copyFallback(text); done(); });
-  else { copyFallback(text); done(); }
-}
-// One request to the firmware host. The token, when present, goes as a Bearer header, exactly like the app.
-async function fwReq(method, path, fields) {
-  const tok = ($('fw-token').value || '').trim();
-  const opt = { method, headers: { 'Accept': 'application/vnd.gpstapi.v2+xml' } };
-  if (tok) opt.headers['Authorization'] = 'Bearer ' + tok;
-  if (fields) { const fd = new FormData(); for (const p of fields) if (p[1] !== '') fd.append(p[0], p[1]); opt.body = fd; }
-  fwOut('> ' + method + ' ' + path); log('FW ' + method + ' ' + path);   // log the path only, never the token
-  try {
-    const res = await fetch(FW_BASE + path, opt);
-    const text = await res.text();
-    fwOut('  <- HTTP ' + res.status + ' (' + text.length + ' bytes)');
-    return { status: res.status, text: text };
-  } catch (e) { fwOut('  network error: ' + e.message + ' (CSP, CORS or offline)'); return { status: 0, text: '' }; }
-}
-function fwDeviceFields() {
-  const cur = ($('fw-cur').value || '').trim();
-  return [['manufacturer', 'vmax'], ['model', ($('fw-model').value || '').trim()], ['controller', ($('fw-ctrl').value || '').trim()],
-          ['serial', ($('fw-serial').value || '').trim()], ['uuid', ($('fw-uuid').value || '').trim()],
-          ['version', cur], ['gpst_fw_mcu', cur]];
-}
-async function fwCheck() { const r = await fwReq('POST', '/api/device/update', fwDeviceFields()); fwOut(r.text.slice(0, 3000)); }
-async function fwDownload() {
-  const r = await fwReq('POST', '/api/device/update', fwDeviceFields());
-  fwOut(r.text.slice(0, 2000));
-  const body = r.text.trim();
-  const m = body.match(/https?:\/\/[^\s"'<>]+\.(?:zip|bin|hex|ota|elf)/i);
-  if (m) { fwOut('  firmware URL in response -> opening: ' + m[0]); window.open(m[0], '_blank'); }
-  else if (r.status === 200 && body.length > 64 && !/^[<{[]/.test(body)) { fwSaveBlob(r.text); }
-  else { fwOut('  no firmware file/URL recognised - if the response is not an error, send it back so we can adjust the fields'); }
-}
-function fwSaveBlob(text) {
-  try {
-    const blob = new Blob([text], { type: 'application/octet-stream' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'vmax_firmware.bin';
-    document.body.appendChild(a); a.click(); a.remove(); fwOut('  response saved as vmax_firmware.bin');
-  } catch (e) { fwOut('  save failed: ' + e); }
-}
-
 // ---- Init ------------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   buildModelDropdown();
@@ -760,20 +835,23 @@ window.addEventListener('DOMContentLoaded', () => {
   applyLang();
   const bv = $('build-ver'); if (bv) bv.textContent = 'build ' + BUILD;
   logDiagnosticHeader();
+  setLimiterEnabled(false);   // grey the write controls from the start
+
+  { const pc = $('public-log'); if (pc) { pc.checked = publicLog; pc.addEventListener('change', () => { publicLog = pc.checked; try { localStorage.setItem('vmnu_publiclog', publicLog ? '1' : '0'); } catch (e) {} renderLog(); }); } }
+  { const dc = $('diag-log'); if (dc) { dc.checked = diagLog; dc.addEventListener('change', () => { diagLog = dc.checked; try { localStorage.setItem('vmnu_diaglog', diagLog ? '1' : '0'); } catch (e) {} }); } }
 
   $('btn-conn').addEventListener('click', () => { if ($('btn-conn').dataset.act === 'disconnect') disconnectBle(); else pickAndConnect(); });
   { const s = $('model-in'); if (s) s.addEventListener('change', () => buildModelDropdown()); }
-  $('btn-open').addEventListener('click', () => writeDrossel(true));
-  $('btn-legal').addEventListener('click', () => writeDrossel(false));
-  $('btn-readtune').addEventListener('click', readTune);
+  // write buttons stay disabled (WRITE_ENABLED=false); listeners attached so flipping the flag re-enables them
+  { const b = $('btn-open'); if (b) b.addEventListener('click', () => writeLimiter(true)); }
+  { const b = $('btn-legal'); if (b) b.addEventListener('click', () => writeLimiter(false)); }
+  { const b = $('btn-readtune'); if (b) b.addEventListener('click', readTune); }
   { const b = $('btn-readall'); if (b) b.addEventListener('click', readAll); }
   { const b = $('btn-canprobe'); if (b) b.addEventListener('click', probeSpeedLimit); }
   { const b = $('btn-copy-log'); if (b) b.addEventListener('click', copyLog); }
   { const b = $('btn-clear-log'); if (b) b.addEventListener('click', clearLog); }
+  { const b = $('btn-save-log'); if (b) b.addEventListener('click', saveLog); }
   { const b = $('btn-diag'); if (b) b.addEventListener('click', scanAllDevicesDiagnostic); }
-  { const b = $('fw-check'); if (b) b.addEventListener('click', fwCheck); }
-  { const b = $('fw-download'); if (b) b.addEventListener('click', fwDownload); }
-  { const b = $('fw-copy'); if (b) b.addEventListener('click', fwCopy); }
 
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });
@@ -790,8 +868,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }); }
   document.addEventListener('click', e => {
     const dd = e.target.closest && e.target.closest('[data-open-disclaimer]');
-    if (dd) { e.preventDefault(); openHelp('disclaimer'); return; }
-    const dp = e.target.closest && e.target.closest('[data-open-privacy]');
-    if (dp) { e.preventDefault(); openDoc(docFile('PRIVACY'), t('footPrivacy')); }
+    if (dd) { e.preventDefault(); openHelp('disclaimer'); }
   });
 });

@@ -1,7 +1,12 @@
 # Anleitung
 
-Diese Anleitung führt Schritt für Schritt durch das VMAX new Tool, vom ersten Verbinden über das
-Auslesen bis zum Setzen der Drossel. Sie setzt nichts voraus.
+Diese Anleitung führt Schritt für Schritt durch das VMAX new Tool: verbinden und alle Werte auslesen.
+Sie setzt nichts voraus.
+
+**Wichtig vorweg:** Sperren und Entsperren funktioniert mit diesem Tool nicht. Der Schreibbefehl für die
+Drossel ist aus der Hersteller-App rekonstruiert, wird von ihr aber nie gesendet, und kein Controller hat
+je bestätigt, dass er einen geschriebenen Wert annimmt. Deshalb ist das Schreiben hier abgeschaltet. Das
+Tool ist ein Lese- und Diagnosewerkzeug: Auslesen funktioniert, Sperren/Entsperren nicht.
 
 ## Was du brauchst
 
@@ -17,97 +22,58 @@ nimm das [Schwester-Tool vmax-unlock](https://laufbursche42.github.io/vmax-unloc
 ## 1. Seite öffnen
 
 Öffne die Seite im passenden Browser. Oben siehst du den Kopf mit Verbindungsstatus, dem
-Hell/Dunkel-Schalter und der Sprachumschaltung DE/EN.
+Hell/Dunkel-Schalter und der Sprachumschaltung DE/EN, darunter den Hinweis-Banner.
 
 ## 2. Verbinden
 
 In der Karte **Verbindung** steht ein Auswahlfeld für das Modell. Es ist nur ein Hinweis, verbunden
-wird immer über den Dienst `DA1A1500`. Tippe auf **Verbinden** und wähle deinen Scooter aus der
-Geräteliste. Lass beim ersten Mal alle Dienste und Merkmale zu. Nach dem Verbinden steht der Status
-auf **verbunden**.
+wird immer über den Dienst `DA1A1500`. Dieses Protokoll braucht **keinen PIN und kein Passwort** - du
+wählst nur dein Gerät im Bluetooth-Dialog. Tippe auf **Verbinden** und wähle deinen Scooter aus der
+Liste. Lass beim ersten Mal alle Dienste und Merkmale zu. Nach dem Verbinden steht der Status auf
+**verbunden**, und die Seite liest automatisch einmal alle lesbaren Merkmale aus.
 
-## 3. Merkmale ansehen
+## 3. Werte ansehen
 
-Die Karte **Gefundene Merkmale** listet alle Dienste und Merkmale mit ihren Eigenschaften (read,
-write, notify). Das Tool abonniert jedes Notify-Merkmal automatisch. Findet es das Schreib-Merkmal
-`DA1A160D` nicht, ist der Scooter wahrscheinlich kein neueres Modell.
+- Die Karte **Live-Werte** zeigt Geschwindigkeit, Akku, Spannung, Leistung, Temperatur, Limit, Motor,
+  Tuning und mehr als Kacheln. Rohwerte ohne gesicherte Einheit sind als solche markiert.
+- Die Karte **Einstellungen** zeigt die ausgelesene Konfiguration (Limit, Radgröße, Unterstützung,
+  Motor- und Akku-Kenndaten, MotorTuning) als reine Anzeige.
+- Die Karte **Erweiterte Einstellungen** zeigt das vollständige MotorTuning, Akku-Detail, Live-Motor,
+  Status, Statistik, Firmware, Seriennummern und Fehlercodes, dazu die Liste aller gefundenen Merkmale.
+- **Alles auslesen** liest die Werte erneut, ohne neu zu verbinden.
 
 ## 4. Tuning auslesen
 
-Tippe in der Karte **Drossel** auf **Tuning auslesen**. Meldet der Scooter über das Merkmal
-`DA1A160C` ein MotorTuning, erscheint es roh im Log. Dieser Schritt verändert nichts. Er zeigt, ob
-dein Modell überhaupt ein beschreibbares MaxSpeed führt und welchen Wert und welche Obergrenze es
-meldet.
+In den erweiterten Einstellungen liest **Tuning auslesen** das MotorTuning-Merkmal `DA1A160C`. Meldet der
+Scooter ein MotorTuning, erscheinen die Werte in der Anzeige und im Log. Das verändert nichts. Auf den
+gemessenen Geräten fehlt dieses Merkmal oft ganz.
 
-## 5. Drossel setzen
+## 5. Drossel (deaktiviert)
 
-In der Karte **Drossel** stehen zwei Felder und zwei Knöpfe:
-
-- **Offen (MaxSpeed):** der Wert, den **Entsperren** schreibt.
-- **Legal (MaxSpeed):** der Wert, den **Sperren** schreibt.
-- **Profil-Index:** in der Regel 0. Das Auslesen zeigt den richtigen Index.
-
-Entsperren (Drossel lösen) schreibt den offenen Wert, Sperren (Drossel setzen) den legalen. Beide
-schreiben denselben MotorTuning-Befehl nach `DA1A160D`, nur mit anderer Zahl. Vor dem Entsperren
-fragt ein Dialog nach.
-
-Wichtig und ehrlich: Die Hersteller-App sendet diesen Befehl nie. Ob der Controller ihn annimmt und
-ob MaxSpeed die Drossel wirklich verändert, ist nicht bewiesen. Lies zuerst aus, bleibe innerhalb
-der gemeldeten Grenzen und beobachte im Log, wie der Scooter reagiert.
+Die Karte **Drossel** zeigt die Felder und Knöpfe, die das Schreiben nutzen würde - zur Transparenz, aber
+**deaktiviert und ausgegraut**. Ein roter Hinweis nennt den Grund. Die Funktion bleibt gesperrt, bis der
+Controller an einem echten Gerät bestätigt, dass er einen geschriebenen MaxSpeed-Wert annimmt.
 
 ## 6. Log
 
-Die Karte **Protokoll** zeigt jeden gesendeten und empfangenen Frame als Hex. Mit **Log kopieren**
-gibst du den Mitschnitt weiter, das hilft, das Protokoll am realen Gerät zu verstehen. **Alle Geräte
-scannen** listet Bluetooth-Geräte in der Nähe mit ihren Diensten.
-
-## 7. Firmware laden (experimentell)
-
-Dieser Abschnitt ist unabhängig vom Bluetooth, rein optional und experimentell. Er fragt den
-Firmware-Server des Herstellers (`api.gpstuner.com`) direkt nach der Firmware - denselben Server, den auch
-die offizielle App nutzt.
-
-**Ehrlicher Stand.** Nach unserer Analyse ist dieser Weg über die Cloud derzeit praktisch zu: den
-Endpunkt, den die aktuelle offizielle App aufruft, hat der Hersteller abgeschaltet und der noch lebende
-Endpunkt liefert nur für eine Geräte-`uuid`, die seine Registry kennt. In aller Regel kommt daher
-`Invalid uuid`. Die Felder bleiben trotzdem, für den Fall, dass jemand eine gültige `uuid` (und einen
-gültigen Token) hat.
-
-**Kein Login, kein Passwort.** Die Seite meldet dich nicht an. Du gibst selbst zwei Dinge ein, falls du
-sie hast: einen Zugangs-Token und deine Geräte-uuid.
-
-**Wichtig zum Datenschutz.** Anders als der Rest der Seite spricht dieser Abschnitt direkt mit dem
-Hersteller-Server `api.gpstuner.com`. Der Token und die Geräte-Kennungen gehen dorthin, an sonst
-niemanden, nicht an den Entwickler. Nichts wird gespeichert, der Token wird in der Ausgabe maskiert. Was
-genau übertragen wird, steht im [Datenschutz](PRIVACY.de.md). Über das Fragezeichen an der Karte Firmware
-kommst du ebenfalls dorthin.
-
-So gehst du vor:
-
-1. **Zugangs-Token** eintragen, falls du einen hast. Er wird als Bearer-Header mitgeschickt, genau wie in
-   der App.
-2. **Geräte-uuid** eintragen. Das ist der Wert, an dem es hängt - ohne eine dem Server bekannte uuid kommt
-   `Invalid uuid`.
-3. **Geräte-Kennungen** ergänzen: Serial (aus `DA1A1511`), Modell und Controller (aus `DA1A1802`). Diese
-   Werte stehen im Log, wenn du vorher per Bluetooth verbunden und ausgelesen hast. Die aktuelle FW lässt
-   du am besten auf `0.0.0`, dann bietet der Server die neueste Version als Update an.
-4. **Firmware prüfen** beziehungsweise **Firmware laden** schickt die Anfrage an den Server.
-
-Die Seite zeigt die Roh-Antworten des Servers im Ausgabefeld. **Firmware-Ausgabe kopieren** legt sie in
-die Zwischenablage, der Token ist dabei maskiert. Klappt es wider Erwarten doch, schick die Antwort
-zurück, dann passen wir die Anfrage an.
+Die Karte **Protokoll** zeigt jeden gesendeten und empfangenen Frame als Hex mit Zeitstempel, dazu die
+dekodierten Werte. Standardmäßig ist das Log **anonymisiert** (Adressen, Seriennummern und Geräte-IDs
+werden geschwärzt), damit du es gefahrlos teilen kannst. Mit **Log kopieren** oder **Als .txt speichern**
+gibst du den Mitschnitt weiter, das hilft, das Protokoll am realen Gerät zu verstehen. Das
+**Diagnose-Log** schneidet zusätzlich jedes rohe Frame mit. **Alle Geräte scannen** listet Bluetooth-Geräte
+in der Nähe mit ihren Diensten.
 
 ## Wenn etwas nicht klappt
 
 - **Der Scooter taucht nicht in der Liste auf.** Ist er an und in Reichweite? Nutze **Alle Geräte
   scannen**.
 - **Kein Notify kommt an.** Prüfe im Log, ob RX-Zeilen erscheinen. Manche Modelle senden erst nach
-  einer kurzen Anlaufzeit oder erwarten einen bestimmten Verbindungsaufbau.
-- **Der Schreibbefehl bewirkt nichts.** Das kann am fehlenden Handshake liegen oder daran, dass der
-  Controller den Befehl nicht kennt. Schick den Log, dann lässt sich der Ablauf nachziehen.
+  einer kurzen Anlaufzeit.
+- **Ein Wert bleibt leer.** Dann meldet der Scooter diesen Wert über Bluetooth nicht. Schick den Log,
+  dann lässt sich der Ablauf nachziehen.
 
 ## Recht
 
-Das Anheben der Höchstgeschwindigkeit hebt die Drossel auf. Die ABE erlischt und der Betrieb auf
+Das Anheben der Höchstgeschwindigkeit würde die Drossel aufheben. Die ABE erlischt und der Betrieb auf
 öffentlichen Wegen ist dann nicht erlaubt. Nutze das Werkzeug nur am eigenen Fahrzeug auf privatem
 Gelände und auf eigenes Risiko.
