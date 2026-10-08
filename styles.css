@@ -1,18 +1,639 @@
-/* VMAX Tool. Palette and theme mechanics from the Laufbursche Edition template.
-   Dark is the default; the light set below is switched in by data-theme on <html>. */
+/* Laufbursche Unlock - canonical shared stylesheet (superset over all 30 pages).
+   One file, byte-identical across every <brand>-unlock page. Do not fork per brand. */
+
 :root {
-  --bg: #0A0C10; --card: #111420; --line: #1C2035; --text: #E4EDF6; --label: #C6D2E2;
-  --muted: #8A93A8; --accent: #B8F020; --value: #BCEB39; --good: #1EE89A; --bad: #FF5050;
-  --warn: #FFAA18; --gps: #3DB8FF; --mono: ui-monospace, Consolas, monospace;
-  --scroll: #2B3350; --field: #0d1018; --chip: #171b2a; --on-accent: #0A0C10;
+  --bg: #0A0C10;
+  --card: #111420;
+  --line: #1C2035;
+  --text: #E4EDF6;
+  --label: #C6D2E2;
+  --muted: #8A93A8;
+  --accent: #B8F020;
+  --value: #BCEB39;
+  --good: #1EE89A;
+  --bad: #FF5050;
+  --warn: #FFAA18;
+  --gps: #3DB8FF;
+  --mono: ui-monospace, Consolas, monospace;
+  --scroll: #2B3350;
+  --field: #0d1018;
+  --chip: #171b2a;
+  --on-accent: #0A0C10;
   color-scheme: dark;
-  --warn-bg: #FFAA1814; --warn-line: #FFAA1840; --warn-strong: #ffc65a;
-  --bad-bg: #FF505014; --bad-line: #FF505040; --bad-strong: #ff8080;
-  --bad-line-soft: #3a2030; --warn-line-soft: #3a3020;
-  --backdrop: rgba(0,0,0,.72); --shadow: rgba(0,0,0,.5);
-  --tx: #6cb6ff; --rx: #e0b25a;
+  --warn-bg: #FFAA1814;
+  --warn-line: #FFAA1840;
+  --warn-strong: #ffc65a;
+  --bad-bg: #FF505014;
+  --bad-line: #FF505040;
+  --bad-strong: #ff8080;
+  --bad-line-soft: #3a2030;
+  --warn-line-soft: #3a3020;
+  --backdrop: rgba(0,0,0,.72);
+  --shadow: rgba(0,0,0,.5);
+  --tx: #6cb6ff;
+  --rx: #e0b25a;
+  --accent-bg: #B8F02014;
+  --accent-line: #B8F02040;
+  /* log line colours: outgoing / incoming */
+  color-scheme: dark;
+  /* native controls, scrollbars and the colour well follow the theme */
+  /* Tinted boxes and their emphasis text. The 8-digit values are one hue at 8 % and 25 % opacity,
+     which is why they carry through both themes without a second set. */
+  --warn-bg: #FFAA1814;
+  /* log frame directions: TX sent, RX received */
+  color-scheme: dark;
 }
+
 [data-theme="light"] {
+  --bg: #E8EDF5;
+  --card: #FFFFFF;
+  --line: #CDD5E4;
+  --text: #0A0D18;
+  --label: #0A0D18;
+  --muted: #4A5468;
+  --accent: #2A6A00;
+  --value: #2A6A00;
+  --good: #1B7A4B;
+  --bad: #CC2020;
+  --warn: #A05800;
+  --gps: #005AA0;
+  --scroll: #B6C0D4;
+  --field: #FFFFFF;
+  --chip: #F1F4FA;
+  --on-accent: #FFFFFF;
+  color-scheme: light;
+  --warn-strong: #7A4300;
+  --bad-strong: #A01818;
+  --bad-line-soft: #E0B4B4;
+  --warn-line-soft: #E0CBA4;
+  --backdrop: rgba(10,13,24,.45);
+  --shadow: rgba(10,13,24,.18);
+  --tx: #0b6bcb;
+  --rx: #8a5a00;
+  --warn-bg: #A0580014;
+  --warn-line: #A0580040;
+  --accent-bg: #2A6A0014;
+  --accent-line: #2A6A0055;
+  /* The lime of the dark theme is unreadable on white, so the light accent is the dark green the
+     app uses there. Text ON the accent turns white instead of near-black. */
+  --accent: #2A6A00;
+  only the emphasis text darkens enough to read on white. */
+  --warn-strong: #7A4300;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+@supports not (scrollbar-width: thin) {
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scroll); border-radius: 11px;
+    border: 3px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+}
+
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45;
+  padding: max(14px, env(safe-area-inset-top)) 14px 40px;
+}
+
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+header { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+
+h1 { font-size: 17px; margin: 0; letter-spacing: .01em; line-height: 1.2; }
+
+h1 span { color: var(--accent); }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px; }
+
+.card h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  margin: 0; font-weight: 700; }
+
+.sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0 2px; width: 100%; }
+
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.btns button { width: 100%; }
+
+.span2 { grid-column: 1 / -1; }
+
+button {
+  appearance: none; border: 1px solid var(--line); background: var(--chip); color: var(--text);
+  padding: 12px 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
+  flex: 1 1 auto; text-align: center; text-decoration: none; display: inline-block;
+}
+
+button:active { transform: translateY(1px); }
+
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+input, select {
+  background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 15px; font-family: var(--mono); min-width: 0; flex: 1 1 90px;
+}
+
+input:disabled, select:disabled, button:disabled { opacity: .45; cursor: not-allowed; }
+
+label { color: var(--label); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+
+.head-right { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.head-tools { display: flex; align-items: center; gap: 8px; }
+
+.langs { display: flex; gap: 4px; }
+
+.langs button { flex: 0 0 auto; padding: 4px 7px; font-family: var(--mono); font-size: 11px;
+  font-weight: 700; letter-spacing: .06em; background: transparent; color: var(--muted);
+  border-radius: 6px; }
+
+.langs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.theme-btn { flex: 0 0 auto; width: 28px; height: 24px; padding: 0; line-height: 1;
+  background: transparent; border-color: var(--line); color: var(--label); font-size: 14px; }
+
+.theme-btn:hover { color: var(--accent); }
+
+.status { font-family: var(--mono); font-size: 13px; padding: 3px 9px; border-radius: 999px;
+  background: var(--chip); color: var(--muted); border: 1px solid var(--line); }
+
+.status[data-state="connected"] { color: var(--accent); border-color: var(--accent); }
+
+.status[data-state="disconnected"], .status[data-state="no-service"], .status[data-state="no-char"] { color: var(--bad); border-color: var(--bad-line-soft); }
+
+.status[data-state="connecting"], .status[data-state="linking"] { color: var(--warn); border-color: var(--warn-line-soft); }
+
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+.tile { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
+
+.tile b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--value); }
+
+.tile small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+
+.hint { color: var(--muted); font-size: 12px; margin: 0; }
+
+.hint a, .warn a { color: var(--accent); }
+
+.warn { color: var(--warn); font-size: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line);
+  border-radius: 8px; padding: 9px 11px; margin: 0; }
+
+.warn b { color: var(--warn-strong); }
+
+pre#log { margin: 0; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+  font-family: var(--mono); font-size: 11.5px; color: var(--muted); max-height: 220px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; overscroll-behavior: contain; }
+
+.log-tx { color: var(--tx); }
+
+.log-rx { color: var(--rx); }
+
+.log-ok { color: var(--good); }
+
+.log-err { color: var(--bad); }
+
+.foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 2px; }
+
+.foot-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; }
+
+.foot a { color: var(--accent); font-size: 12px; text-decoration: none; }
+
+.foot a:hover { text-decoration: underline; }
+
+.foot .ver { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+code { font-family: var(--mono); font-size: 12px; background: var(--field); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px; color: var(--value); word-break: break-all; }
+
+/* Two settings columns share one grid, so field and button line up across rows. */
+.set-row { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: 10px; align-items: center; }
+
+.set-row label { grid-column: 1 / -1; }
+
+.set-row input, .set-row select, .set-row button { width: 100%; flex: none; }
+
+/* Document viewer. Only the open dialog is a flex column. */
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  color: var(--text); max-width: 44rem; width: calc(100% - 2rem); padding: 0; }
+
+dialog::backdrop { background: var(--backdrop); }
+
+#doc { max-height: 88vh; overflow: hidden; }
+
+#doc[open] { display: flex; flex-direction: column; }
+
+.doc-head { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line); }
+
+.doc-head h3 { margin: 0; font-size: 15px; color: var(--text); }
+
+#doc-x, #help-x { flex: 0 0 auto; background: none; border: 0; color: var(--label); font-size: 22px;
+  line-height: 1; padding: 0 4px; }
+
+#doc-x:hover, #help-x:hover { color: var(--accent); }
+
+.doc-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain;
+  color: var(--label); font-size: 13.5px; }
+
+.doc-body > :first-child { margin-top: 0; }
+
+.doc-body h1 { font-size: 16px; color: var(--text); margin: 0 0 12px; }
+
+.doc-body h2 { font-size: 14px; color: var(--accent); margin: 22px 0 8px; }
+
+.doc-body h3, .doc-body h4 { font-size: 13.5px; color: var(--text); margin: 16px 0 6px; }
+
+.doc-body p { margin: 0 0 11px; }
+
+.doc-body ul, .doc-body ol { margin: 0 0 12px; padding-left: 18px; }
+
+.doc-body li { margin-bottom: 5px; }
+
+.doc-body b { color: var(--text); }
+
+.doc-body ul.nested { margin: 6px 0 2px; padding-left: 16px; }
+
+.doc-body ul.nested li { margin-bottom: 3px; }
+
+.doc-body a { color: var(--accent); }
+
+.doc-body code { font-family: var(--mono); font-size: .88em; background: var(--field);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+
+.doc-body pre { background: var(--field); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; margin: 0 0 12px; overflow-x: auto; }
+
+.doc-body pre code { border: 0; background: none; padding: 0; font-size: 12px; line-height: 1.6; }
+
+.doc-body hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+
+.doc-body blockquote { margin: 0 0 12px; padding-left: 11px; color: var(--muted);
+  border-left: 2px solid var(--line); }
+
+.doc-table { overflow-x: auto; margin: 0 0 12px; }
+
+.doc-body table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+
+.doc-body th, .doc-body td { border: 1px solid var(--line); padding: 7px 9px; text-align: left;
+  vertical-align: top; }
+
+.doc-body th { color: var(--text); background: var(--field); }
+
+.doc-foot { display: flex; justify-content: center; padding: 14px 16px;
+  border-top: 1px solid var(--line); }
+
+.doc-foot button { flex: 0 0 auto; padding: 10px 22px; }
+
+/* Shortcut links (Verknuepfungen) - exakt nach trfm-unlock: vertikaler Stack, URL-Box in --value. */
+.linkrow { display: flex; flex-direction: column; gap: 5px; }
+
+.linkrow .lbl { color: var(--label); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+
+.copy { margin: 0; font-family: var(--mono); font-size: 11.5px; background: var(--field); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 11px; color: var(--value); white-space: pre-wrap; word-break: break-all;
+  -webkit-user-select: all; user-select: all; }
+
+.copy-offscreen { position: fixed; top: -1000px; opacity: 0; }
+
+/* Help "?" icon in a card header, opens a modal with the explanation. */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.help-btn { flex: 0 0 auto; width: 22px; height: 22px; min-width: 22px; padding: 0; border-radius: 50%;
+  font-size: 13px; font-weight: 700; line-height: 1; background: var(--chip); border: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; }
+
+.help-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+#help { max-width: 520px; }
+
+#help #help-body { margin: 0; }
+
+/* Dynamic settings list (more-card): group headers between the set-rows. */
+.set-group { margin: 8px 0 2px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; }
+
+#settings-list .set-row { margin-bottom: 8px; }
+
+#confirm { max-width: 420px; }
+
+#confirm .doc-foot { gap: 10px; }
+
+/* Setting row label with an inline "?" help button on the right. The generic
+   ".set-row button { width: 100% }
+
+" rule would otherwise stretch the "?" across the
+   whole row, so pin it back to a small round button here (higher specificity). */
+.set-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.set-label span { min-width: 0; flex: 1 1 auto; }
+
+.set-label .help-btn { flex: 0 0 auto; width: 22px; min-width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+
+/* Speed card: the two values (open / eKFV) side by side, each label stacked over its input. */
+.speed-values { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.speed-values .sv { display: flex; flex-direction: column; gap: 6px; }
+
+.speed-values .sv input { width: 100%; flex: none; }
+
+/* Red warning line inside the "?" help dialog, shown only for risky settings. */
+.help-warn { color: var(--bad); font-weight: 600; margin: 10px 0 0; }
+
+/* Viron: Expertenmodus-Umschalter (Checkbox-Zeile) */
+.switch-row { display: flex; align-items: center; gap: .55rem; cursor: pointer; font-weight: 600; }
+
+.switch-row input { width: 1.15rem; height: 1.15rem; }
+
+/* Viron: zwei saubere Spalten fuer Offen/Gedrosselt */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.field input { width: 100%; flex: none; }
+
+/* Viron: aufklappbare Fachfunktionen (details), standardmaessig zu */
+details.exp { display: block; }
+
+details.exp > * { margin-top: 12px; }
+
+details.exp > summary { margin-top: 0; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+
+details.exp > summary::-webkit-details-marker { display: none; }
+
+details.exp > summary::before { content: "+"; color: var(--accent); font-size: 15px; line-height: 1; width: 12px; text-align: center; }
+
+details.exp[open] > summary::before { content: "-"; }
+
+details.exp .card-head h3 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; font-weight: 700; }
+
+/* Viron: Gruppen-Ueberschrift in der Einstellungen-Karte */
+.set-grp { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+  font-weight: 700; margin: 10px 0 2px; }
+
+#settings-body .set-row:first-child { margin-top: 0; }
+
+/* Viron: kompakte Einstellungs-Zeilen mit Segment-Umschalter */
+.srow { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid var(--line); }
+
+.srow:last-child { border-bottom: none; }
+
+.srow-label { display: flex; align-items: center; gap: 7px; flex: 1 1 auto; min-width: 0;
+  font-size: 13.5px; color: var(--text); }
+
+.srow-label .help-btn { flex: 0 0 auto; }
+
+.seg { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+
+.seg .setbtn { flex: 0 0 auto; min-width: 58px; padding: 8px 12px; border: 0; border-radius: 0;
+  background: var(--chip); color: var(--muted); font-size: 13px; font-weight: 700; }
+
+.seg .setbtn + .setbtn { border-left: 1px solid var(--line); }
+
+.seg .setbtn.active { background: var(--accent); color: var(--on-accent); }
+
+.seg .setbtn:disabled { opacity: .45; }
+
+.vgrp { display: inline-flex; flex: 0 0 auto; gap: 8px; align-items: center; }
+
+.vgrp .setinput { width: 88px; text-align: right; padding: 8px 10px; flex: none; }
+
+.vgrp .wbtn { flex: 0 0 auto; padding: 8px 14px; }
+
+/* Viron: vollstaendige Telemetrie-Liste (alle empfangenen Register) */
+.allregs > summary { cursor: pointer; font-size: 12px; letter-spacing: .04em; color: var(--accent);
+  font-weight: 700; list-style: none; padding: 4px 0; }
+
+.allregs > summary::-webkit-details-marker { display: none; }
+
+.allregs > summary::before { content: "+ "; }
+
+.allregs[open] > summary::before { content: "- "; }
+
+#all-regs { margin: 6px 0 2px; }
+
+.regrow { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: 10px; align-items: baseline;
+  padding: 3px 0; border-bottom: 1px solid var(--line); }
+
+.regrow:last-child { border-bottom: none; }
+
+.regaddr { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+.reglabel { font-size: 12.5px; color: var(--text); }
+
+.regval { font-family: var(--mono); font-size: 13px; color: var(--value); font-weight: 700; text-align: right; }
+
+.log-opts { margin: 0 0 8px; }
+
+.log-opt { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 5px; margin: 0 0 4px; }
+
+.log-opt input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+
+/* Setting row label, with room for an inline control next to it. */
+.set-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* Two-column field pair (open / eKFV): label stacked above the input, side by side. */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.two .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.two .fld input { width: 100%; flex: none; }
+
+/* --- inokim additions: details expanders + all-frames decode (tokens reused from above) --- */
+details.card > summary { cursor: pointer; font-weight: 600; list-style: none; }
+
+details.card > summary::-webkit-details-marker { display: none; }
+
+details.card > summary::after { content: "+"; float: right; color: var(--muted); font-weight: 700; }
+
+details.card[open] > summary::after { content: "-"; }
+
+details.card.exp { border: 1px solid var(--warn-line); background: var(--warn-bg); }
+
+details.card.exp h3 { margin: 12px 0 6px; font-size: 14px; }
+
+details.allframes { margin-top: 10px; }
+
+details.allframes > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+.frames { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; font-family: var(--mono); font-size: 12px; }
+
+.fr-row { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: baseline; padding: 2px 0; border-bottom: 1px solid var(--line); }
+
+.fr-op { color: var(--accent); }
+
+.fr-label { color: var(--muted); }
+
+.fr-val { color: var(--value); word-break: break-all; text-align: right; }
+
+.doc-code { font-family: var(--mono); font-size: 12px; background: var(--field); padding: 10px; border-radius: 8px; overflow-x: auto; white-space: pre; }
+
+/* --- canonical additions: cover classes present in markup but not previously styled --- */
+.err { color: var(--bad); font-size: 12px; margin: 4px 0 0; }
+
+.foot-copy { color: var(--accent); font-size: 12px; text-decoration: none; }
+
+.foot-copy:hover { text-decoration: underline; }
+
+/* Download-Button (Link im Button-Stil) und zweisprachige Inhaltsblöcke für die Info-Seite. */
+a.dl { display: inline-block; background: var(--accent); border: 1px solid var(--accent);
+  color: var(--on-accent); padding: 12px 16px; border-radius: 10px; font-weight: 700;
+  text-decoration: none; text-align: center; }
+
+a.dl:hover { text-decoration: none; filter: brightness(1.05); }
+
+.content .doc-body { color: var(--text); font-size: 14px; }
+
+.content .doc-body ol, .content .doc-body ul { padding-left: 20px; }
+
+/* Warnhinweis als formatierte Liste statt Fliesstext. */
+.warn .warn-title { display: block; margin-bottom: 6px; color: var(--warn-strong); font-weight: 700; }
+
+/* Deprecation banner: red tone, always visible, cannot be dismissed. */
+.sunset-banner { background: var(--bad-bg); border: 1px solid var(--bad-line); border-radius: 10px;
+  padding: 11px 14px; font-size: 12px; line-height: 1.5; color: var(--text); }
+
+.sunset-banner b { color: var(--bad-strong); }
+
+.sunset-banner a { color: var(--bad-strong); text-decoration: underline; }
+
+.warn ul { margin: 0; padding-left: 18px; }
+
+.warn li { margin: 5px 0; }
+
+/* Disclaimer / reason note under a tuning or settings card. */
+.reason { color: var(--warn); }
+
+.log-opt .help-btn { margin: 0 5px; }
+
+.log-opt span { color: var(--label); font-size: 12px; }
+
+/* Remember-password convenience toggle in the connection card. */
+.check-row { display: flex; align-items: center; gap: 8px; color: var(--label); font-size: 12px; text-transform: none; letter-spacing: 0; }
+
+.check-row input[type="checkbox"] { -webkit-appearance: checkbox; appearance: auto; width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
+
+/* Advanced parameter rows: decoded value (read) plus a raw-word write field. */
+.sub-h { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; font-weight: 700; }
+
+#adv-rows { display: flex; flex-direction: column; gap: 10px; }
+
+.adv-row { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+.adv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+
+.adv-lbl { color: var(--label); font-size: 13px; font-weight: 600; }
+
+.adv-reg { color: var(--muted); font-family: var(--mono); font-size: 10.5px; white-space: nowrap; }
+
+.adv-val { color: var(--value); font-family: var(--mono); font-size: 11.5px; word-break: break-word; }
+
+.adv-write { display: grid; grid-template-columns: minmax(0, 1fr) 9rem; gap: 8px; }
+
+.adv-write input, .adv-write button { width: 100%; flex: none; }
+
+/* Per-value help icon in a settings row (EPF Tool). */
+.set-row .lblrow { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+
+.set-row .lblrow label { grid-column: auto; }
+
+.set-row .lblrow .help-btn { width: 18px; height: 18px; min-width: 18px; font-size: 11px; }
+
+.speed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+
+.speed-grid .set-row { grid-template-columns: 1fr; }
+
+.tile-badge { position: absolute; top: 5px; right: 7px; font-size: 10px; line-height: 1; padding: 2px 5px;
+  border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--chip); cursor: help; }
+
+.tile-badge[data-kind="unconfirmed"] { color: var(--warn); border-color: var(--warn-line); }
+
+/* Per-DP setting / advanced rows. Each row: label + gating badge on top, control + Set below. */
+.dp-rows { display: flex; flex-direction: column; gap: 10px; }
+
+.dp-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+
+.dp-row:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.dp-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.dp-row-head label { grid-column: auto; }
+
+.dp-row-ctrl { display: grid; grid-template-columns: minmax(0, 1fr) 6rem; gap: 10px; align-items: center; }
+
+.dp-row-ctrl .dp-ctrl, .dp-row-ctrl .dp-set { width: 100%; flex: none; }
+
+.badge { flex: 0 0 auto; font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--chip); white-space: nowrap; }
+
+.badge[data-kind="ok"] { color: var(--good); border-color: var(--good); }
+
+.badge[data-kind="schema"], .badge[data-kind="session"] { color: var(--warn); border-color: var(--warn-line); }
+
+/* Multi-line input column (device schema). */
+.set-col { display: flex; flex-direction: column; gap: 6px; }
+
+textarea { background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 13px; font-family: var(--mono); width: 100%; resize: vertical; min-height: 60px; }
+
+textarea:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Bluetooth-log upload: file input styled as a button, like lb-tool-web. */
+.file-field { display: flex; gap: 8px; align-items: center; }
+
+.file-btn { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 8px 12px; font-size: 12px; font-weight: 600;
+  text-transform: none; letter-spacing: normal; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); color: var(--text); cursor: pointer; }
+
+.file-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); }
+
+/* Two-button dialog footer (confirm). */
+.doc-foot-2 { justify-content: space-between; gap: 10px; }
+
+.doc-foot-2 button { flex: 1 1 auto; }
+
+/* Top banner: reading/proving the protocol works, tuning is gated behind per-device keys. Always visible. */
+.banner { background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 12px; padding: 12px 14px;
+  color: var(--text); font-size: 13px; line-height: 1.5; }
+
+.banner b { color: var(--bad-strong); }
+
+.banner a { color: var(--accent); }
+
+/* Relocation notice: this tool moves to lb-tool-web. Red for corporate-identity consistency across the family. */
+.moved { background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 12px; padding: 12px 14px;
+  color: var(--text); font-size: 13px; line-height: 1.5; }
+
+.moved b { color: var(--bad-strong); }
+
+.moved a { color: var(--bad-strong); text-decoration: underline; font-weight: 700; }
+
+.ctrl-block { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+
+.ctrl-block + .ctrl-block { border-top: 1px solid var(--line); padding-top: 12px; }
+
+.ctrl-block h3 { margin: 0; font-size: 12px; color: var(--label); text-transform: uppercase;
+  letter-spacing: .06em; font-weight: 700; }
+
+.raw-in { width: 100%; flex: none; }
+
+input[type="file"] { width: 100%; color: var(--muted); font-size: 12px; font-family: var(--mono);
+  background: var(--field); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; }
+input[type="file"]::file-selector-button { appearance: none; background: var(--chip); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-right: 12px; font-weight: 600; cursor: pointer; }
+input[type="file"]::file-selector-button:hover { border-color: var(--accent); }
+
+.set-row.three { grid-template-columns: minmax(0, 1fr) 5rem 10.5rem; }
+
+#tiles-empty { color: var(--muted); font-size: 12px; margin: 0; }
+
+:root[data-theme="light"] {
   --bg: #E8EDF5; --card: #FFFFFF; --line: #CDD5E4; --text: #0A0D18; --label: #0A0D18;
   --muted: #4A5468;
   --accent: #2A6A00; --value: #2A6A00; --good: #1B7A4B; --bad: #CC2020;
@@ -24,199 +645,520 @@
   --backdrop: rgba(10,13,24,.45); --shadow: rgba(10,13,24,.18);
   --tx: #0b6bcb; --rx: #8a5a00;
 }
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
 
-* { scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
-@supports not (scrollbar-width: thin) {
-  ::-webkit-scrollbar { width: 11px; height: 11px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: var(--scroll); border-radius: 11px;
-    border: 3px solid transparent; background-clip: content-box;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
-  ::-webkit-scrollbar-corner { background: transparent; }
-}
-body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font-family: -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.45;
-  padding: max(14px, env(safe-area-inset-top)) 14px 40px;
-}
-.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-header { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
-h1 { font-size: 17px; margin: 0; letter-spacing: .01em; line-height: 1.2; }
-h1 span { color: var(--accent); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
-  display: flex; flex-direction: column; gap: 12px; }
-.card h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+.status[data-state="connecting"], .status[data-state="linking"], .status[data-state="handshake"] { color: var(--warn); border-color: var(--warn-line-soft); }
+
+.warn.bad { color: var(--bad); background: var(--bad-bg); border-color: var(--bad-line); }
+
+.warn.bad b { color: var(--bad-strong); }
+
+/* Read-only key/value tables (settings + advanced). */
+table.kv { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+table.kv td { border-top: 1px solid var(--line); padding: 7px 4px; vertical-align: top; }
+
+table.kv tr:first-child td { border-top: 0; }
+
+.kv-k { color: var(--label); padding-right: 12px !important; }
+
+.kv-v { color: var(--value); font-family: var(--mono); text-align: right; word-break: break-word; }
+
+.kv-muted { color: var(--muted); }
+
+/* Session/encryption state read-out reads as a value, like the tiles and kv values. */
+#enc-state { color: var(--value); font-family: var(--mono); }
+
+/* Greyed tuning card: capability shown, everything disabled. */
+.gate-card { opacity: .96; }
+
+.gate-card .set-row input, .gate-card .set-row select, .gate-card .toggle-row button { pointer-events: none; }
+
+.gate-reason { color: var(--muted); font-style: italic; }
+
+/* Key inputs stack vertically, label above field. */
+.key-row { display: flex; flex-direction: column; gap: 5px; }
+
+.key-row input { width: 100%; flex: none; }
+
+/* Toggle rows (greyed tuning card): label left, two buttons right. */
+.toggle-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; align-items: center; }
+
+.toggle-row label { grid-column: auto; }
+
+.toggle-row button { padding: 8px 12px; font-size: 13px; }
+
+.toggle-row button.on.active { background: var(--good); border-color: var(--good); color: var(--on-accent); }
+
+.toggle-row button.off.active { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+button:hover:not(:disabled) { border-color: var(--accent); }
+
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+/* navee rows: a label on its own line, then the field(s). */
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.row label.full, label.full { flex-basis: 100%; width: 100%; }
+
+.row label input[type="checkbox"] { flex: 0 0 auto; margin-right: 6px; }
+
+.row > label { text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 12px; display: flex; align-items: center; }
+
+.fin { color: var(--muted); font-size: 12px; }
+
+details { margin: 0; }
+
+summary { cursor: pointer; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+
+details[open] > summary { margin-bottom: 10px; }
+
+details > .row, details > .hint { margin-top: 10px; }
+
+.status[data-state="connecting"] { color: var(--warn); border-color: var(--warn-line-soft); }
+
+.status[data-state="error"] { color: var(--bad); border-color: var(--bad-line-soft); }
+
+.status[data-state="disconnected"] { color: var(--muted); }
+
+.hint-warn { color: var(--warn-strong); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+
+.hint-danger { color: var(--bad); background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 8px; padding: 9px 11px; font-weight: 700; }
+
+/* Grey callout so a note (e.g. the Android-app pointer) stands out from the plain hints. */
+.infobox { background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+
+#doc, #help { max-height: 88vh; overflow: hidden; }
+
+#doc[open], #help[open] { display: flex; flex-direction: column; }
+
+/* No spinner arrows on number inputs (Firefox, Chrome/Safari/Edge). */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Throttle: two columns, each one line "label [field]" side by side. */
+.dr-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+
+.dr-field { display: flex; flex-direction: row; align-items: center; gap: 8px; min-width: 0; }
+
+.dr-field label { text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 12px; flex: 0 1 auto; }
+
+.dr-field input { flex: 0 0 3.6rem; width: 3.6rem; text-align: center; padding: 8px 6px; }
+
+/* Bluetooth-log upload: the friendly "drop the file, we find the userId" box. */
+.logdrop { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--field); }
+
+.logdrop label { color: var(--value); font-weight: 600; }
+
+.logdrop input[type=file] { width: 100%; color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+/* Model tile spans the full row: model names are longer than region/SKU codes. */
+.tile-wide { grid-column: 1 / -1; }
+
+/* A settings row shown for an unverified model (model not recognized from the serial). */
+.set-row.caution { border-left: 3px solid var(--warn-line); background: var(--warn-bg); border-radius: 8px; padding-left: 8px; }
+
+/* Feasibility note: a single card-level honesty banner above the live values. */
+.feasibility { margin: 0; }
+
+/* Tuning / lock card: sub-blocks separated by .sep, each with an optional greyed-out reason line. */
+.card h3 { font-size: 13px; margin: 0; color: var(--text); font-weight: 700; }
+
+.ctl-block { display: flex; flex-direction: column; gap: 12px; }
+
+/* A control that is not proven-functional for the resolved model is disabled and explains why. */
+.ctl-reason { color: var(--warn-strong); font-size: 12px; margin: 0; background: var(--warn-bg);
+  border: 1px solid var(--warn-line); border-radius: 8px; padding: 7px 10px; }
+
+.log-opt > span { color: var(--label); font-size: 13px; }
+
+/* Open and eKFV sit side by side in two columns; each field stacks its label over its input. */
+.speed-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+
+.speed-cols .set-row { grid-template-columns: 1fr; }
+
+/* Ride modes side by side (eco / normal / sport), not stacked. The active mode is highlighted. */
+.mode-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.mode-cols .mode-btn { width: 100%; text-transform: capitalize; }
+
+.mode-cols .mode-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+#interactive-ui { display: flex; flex-direction: column; gap: 14px; }
+
+#conn-body { display: flex; flex-direction: column; gap: 12px; }
+
+/* ---- collapsible sections (details/summary) ------------------------------- */
+details.card { gap: 0; }
+
+details.card > summary h2 { flex: 1 1 auto; }
+
+details.card > summary .chev { flex: 0 0 auto; color: var(--muted); font-size: 12px;
+  transition: transform .15s ease; }
+
+details.card[open] > summary .chev { transform: rotate(90deg); }
+
+details.card[open] > summary { margin-bottom: 12px; }
+
+details.card > .sect-body { display: flex; flex-direction: column; gap: 12px; }
+
+.browser-req { margin: 0; font-size: 12px; font-weight: 700; text-decoration: underline; }
+
+.browser-req a { color: var(--accent); }
+
+.warn p { margin: 0; }
+
+.warn > * + * { margin-top: 7px; }
+
+/* ---- remembered scooters -------------------------------------------------- */
+.remembered { display: flex; flex-direction: column; gap: 8px; }
+
+.scooter-item { display: flex; align-items: center; gap: 10px; background: var(--field);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; text-align: left; }
+
+.scooter-item:hover { border-color: var(--accent); }
+
+.scooter-item .name { flex: 1 1 auto; font-weight: 600; font-size: 14px; }
+
+.scooter-item .meta { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+
+.toggle-row .toggle-label { color: var(--label); font-size: 13px; }
+
+.toggle { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; flex: 0 0 auto; }
+
+.toggle button { flex: 0 0 auto; border: 0; border-radius: 0; background: var(--chip); color: var(--muted);
+  padding: 9px 16px; font-size: 13px; font-weight: 700; min-width: 56px; }
+
+.toggle button + button { border-left: 1px solid var(--line); }
+
+.toggle button[aria-pressed="true"][data-val="on"] { background: var(--good); color: var(--on-accent); }
+
+.toggle button[aria-pressed="true"][data-val="off"] { background: var(--bad); color: var(--on-accent); }
+
+/* ---- generic controls (stepper / text / lock) ----------------------------- */
+.stepper { display: inline-flex; gap: 8px; align-items: center; }
+
+.stepper-readout { min-width: 4.5rem; text-align: center; padding: 9px 8px; font-family: var(--mono);
+  font-size: 13px; color: var(--text); background: var(--field); }
+
+.text-ctl { display: inline-flex; gap: 8px; align-items: center; }
+
+.text-ctl input { flex: 1 1 8rem; }
+
+.lock-controls { display: flex; flex-direction: column; gap: 12px; }
+
+.lock-block { display: flex; flex-direction: column; gap: 8px; }
+
+.tile[draggable="true"] { cursor: grab; }
+
+.tile.dragging { opacity: .5; cursor: grabbing; border-color: var(--accent); }
+
+.tile.drag-over { border-color: var(--accent); border-style: dashed; }
+
+.tile.tile-hidden { display: none; }
+
+.tile .tile-hide { position: absolute; top: 4px; right: 6px; width: 18px; height: 18px; padding: 0;
+  line-height: 1; font-size: 12px; background: transparent; border: 0; color: var(--muted); }
+
+.tile .tile-hide:hover { color: var(--bad); }
+
+/* tile manager: checkboxes to re-show hidden tiles */
+.tile-manager { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.tile-manager label { display: inline-flex; align-items: center; gap: 5px; text-transform: none;
+  letter-spacing: 0; font-size: 12px; color: var(--label); background: var(--field);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+
+.tile-manager input { flex: none; width: auto; min-width: 0; }
+
+.danger { color: var(--bad); background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 8px;
+  padding: 9px 11px; font-weight: 700; margin: 0 0 8px; }
+
+#confirm-body { white-space: pre-line; }
+
+#doc[open], #confirm[open], #help[open] { display: flex; flex-direction: column; }
+
+.doc-x { flex: 0 0 auto; background: none; border: 0; color: var(--label); font-size: 22px;
+  line-height: 1; padding: 0 4px; }
+
+.doc-x:hover { color: var(--accent); }
+
+.doc-body blockquote strong, .doc-body blockquote b { color: var(--warn-strong); }
+
+.doc-body blockquote > :first-child { margin-top: 0; }
+
+.doc-body blockquote > :last-child { margin-bottom: 0; }
+
+#confirm .doc-body b { color: var(--bad-strong); }
+
+#confirm .doc-foot button.danger { background: var(--bad); border-color: var(--bad); color: var(--on-accent); }
+
+/* .dlg-sec is the same heading inside a dialog, where there is no .card around it. */
+.card h2, .dlg-sec { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
   margin: 0; font-weight: 700; }
-.sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0 2px; width: 100%; }
-.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.btns button { width: 100%; }
-.span2 { grid-column: 1 / -1; }
-button {
+
+.full { flex: 1 1 100%; }
+
+button, .btn {
   appearance: none; border: 1px solid var(--line); background: var(--chip); color: var(--text);
   padding: 12px 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer;
   flex: 1 1 auto; text-align: center; text-decoration: none; display: inline-block;
 }
-button:active { transform: translateY(1px); }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-input, select {
-  background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
-  padding: 10px 12px; font-size: 15px; font-family: var(--mono); min-width: 0; flex: 1 1 90px;
+
+button:active, .btn:active { transform: translateY(1px); }
+
+button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.btn.fw { background: transparent; border-color: var(--gps); color: var(--gps); }
+
+input:disabled, select:disabled, button:disabled, .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.status[data-state="linking"], .status[data-state="no-data"] { color: var(--warn); border-color: var(--warn-line-soft); }
+
+.fin span { color: var(--text); }
+
+.fin span[data-t] { color: inherit; }
+
+/* Neutral (grey) verdict for the read-only / reading firmware states. */
+.verdict.neutral { border-left-color: var(--muted); }
+
+.danger b { color: var(--bad-strong); }
+
+/* Verdict box: reused by the firmware indicator, the error report and the battery health line. */
+.verdict { border: 1px solid var(--line); border-left: 3px solid var(--good); background: var(--field);
+  border-radius: 8px; padding: 9px 11px; margin-top: 10px; font-size: 13px; color: var(--label); }
+
+.verdict.bad { border-left-color: var(--bad); }
+
+/* The error report reuses the box for its findings, so it needs the other two severities as well.
+   First in a list it carries no top margin: the dialog body already spaces its children. */
+.verdict.caution { border-left-color: var(--warn); }
+
+.verdict.info { border-left-color: var(--gps); }
+
+#err-list > .verdict:first-child, #bat-health > .verdict { margin-top: 0; }
+
+.verdict b { color: var(--text); }
+
+.verdict .detail { display: block; margin-top: 4px; font-family: var(--mono); font-size: 12px;
+  color: var(--muted); }
+
+/* Same spacing rule as .card: a flex column with one gap, so warning boxes, hint lines and tick
+   boxes can never end up glued to each other. Children therefore carry no bottom margin of their
+   own; the gap is the single place the distance is decided. */
+.dlg-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.dlg-body h3 { margin: 0; font-size: 15px; color: var(--warn); }
+
+.dlg-body .hint { margin: 0; }
+
+.dlg-body ul { margin: 0; padding-left: 18px; color: var(--label); font-size: 13px; }
+
+.dlg-body li { margin-bottom: 6px; }
+
+.dlg-body li b { color: var(--text); }
+
+.dlg-body li:last-child { margin-bottom: 0; }
+
+.dlg-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 0 16px 16px; }
+
+/* The body already ends with its own padding, so the foot only needs the side and bottom edges. */
+.dlg-body + .dlg-foot { padding-top: 0; }
+
+/* Document viewer. Only the open dialog is a flex column: a display value on the
+   closed one would beat the browser's display:none and drop it into the page. */
+/* Every scrolling dialog shares one shell; only the width differs. */
+#doc, #err, #bat { max-height: 88vh; overflow: hidden; }
+
+#err, #bat { max-width: 30rem; }
+
+#doc[open], #err[open], #bat[open] { display: flex; flex-direction: column; }
+
+#doc-x, #err-close, #bat-close, #fwwarn-close { flex: 0 0 auto; background: none; border: 0;
+  color: var(--label); font-size: 22px; line-height: 1; padding: 0 4px; }
+
+#doc-x:hover, #err-close:hover, #bat-close:hover, #fwwarn-close:hover { color: var(--accent); }
+
+.dlg-body a { color: var(--accent); }
+
+/* Scrolling dialogs (error report / battery info) keep their body inside the shell. */
+#err .dlg-body, #bat .dlg-body { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  overscroll-behavior: contain; }
+
+/* One label/value pair per line: reused by the battery-info pack rows. */
+.led-row-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Battery info. One label/value pair per line. The column and the row both reuse shapes the page
+   already has, so only the value type is new here. */
+#bat-pack { display: flex; flex-direction: column; gap: 7px; }
+
+.kv > b { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--value); }
+
+/* The cells are the tiles of the live card, packed tighter because there are two dozen of them.
+   Everything but the size comes from .tile / .grid above. */
+.grid.cells { grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: 8px; }
+
+.grid.cells .tile { padding: 8px 6px; }
+
+.grid.cells .tile b { font-size: 15px; }
+
+.tile.cell-full b { color: var(--good); }
+
+.tile.cell-low b { color: var(--bad); }
+
+.tile.cell-bal { border-color: var(--accent); }
+
+.tile .bal { display: block; color: var(--accent); }
+
+/* Firmware-warning modal: the reported version, emphasised via CSS (not inline HTML). */
+.fw-ver { font-weight: 600; color: var(--value); white-space: nowrap; }
+
+/* Per-gear settings table: label column plus Speed / Anfahrt v / Anfahrt h, aligned with headers. */
+.gears { display: flex; flex-direction: column; gap: 6px; }
+
+.gear-row { display: grid; grid-template-columns: 48px repeat(6, 1fr); gap: 3px; align-items: center; }
+
+.gear-row > label { margin: 0; text-align: left; font-size: 11px; white-space: nowrap; }
+
+.gear-row > input { flex: none; width: 100%; min-width: 0; max-width: 44px; justify-self: center; text-align: center; padding: 8px 2px; font-size: 13px; }
+
+.gear-head > span { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+
+#adv-telemetry { display: flex; flex-direction: column; gap: 7px; }
+
+/* firmware flasher */
+.bar { height: 8px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line);
+  overflow: hidden; margin: 10px 0 6px; }
+
+.bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+/* The tick box that arms the flash button. */
+.consent-row { display: flex; align-items: flex-start; gap: 8px; margin: 0;
+  color: var(--text); font-size: 13px; line-height: 1.5; cursor: pointer; }
+
+.consent-row input { margin-top: 2px; flex: 0 0 auto; }
+
+/* Document viewer. Only the open dialog is a flex column: a display value on the
+   closed one would beat the browser's display:none and drop it into the page. */
+/* Every scrolling dialog shares one shell; only the width differs. */
+#doc, #led, #err, #bat, #help { max-height: 88vh; overflow: hidden; }
+
+#led, #err, #bat, #help { max-width: 30rem; }
+
+#doc[open], #led[open], #err[open], #bat[open], #help[open] { display: flex; flex-direction: column; }
+
+#doc-x, #led-close, #err-close, #bat-close, #help-x { flex: 0 0 auto; background: none; border: 0;
+  color: var(--label); font-size: 22px; line-height: 1; padding: 0 4px; }
+
+#doc-x:hover, #led-close:hover, #err-close:hover, #bat-close:hover, #help-x:hover { color: var(--accent); }
+
+/* LED dialog. Shell and close button come from the document viewer above; the body is the only
+   part that differs, because it is the one that can outgrow the screen. Scrollbars need nothing
+   here: the page styles them globally on * near the top of this file. */
+#led .dlg-body, #err .dlg-body, #bat .dlg-body { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  overscroll-behavior: contain; }
+
+/* One setting per row: the label above, the control across the full width beneath it. The base
+   input rule pads every field by 10px, which is right for a text box and wrong for a slider or a
+   colour well, so those two reset it and set their own height. */
+.led-row { display: flex; flex-direction: column; gap: 6px; }
+
+/* Both controls sit at 32 px so they read as one set. The base input rule is built for the wide
+   fields on the page (10 px padding at 15 px type, about 42 px tall) and towers over a dialog whose
+   labels are 13 px. */
+/* flex: 0 0 auto is the load-bearing part. The base rule gives every field flex: 1 1 90px. In
+   this COLUMN the main axis is vertical, so that basis of 90 px plus grow decides the height and
+   beats any height given here. */
+/* The effect list is built from page elements rather than a <select>, because the drop-down of a
+   native select is drawn by the operating system and its scrollbar cannot be styled. This one is an
+   ordinary scroll container, so the global scrollbar rule at the top of this file covers it. */
+.picker { position: relative; }
+
+.picker-btn { width: 100%; height: 32px; padding: 0 10px; font-size: 13px; text-align: left;
+  background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+
+.picker-btn::after { content: "▾"; float: right; color: var(--muted); }
+
+/* Fixed, not absolute. The dialog body is a scroll container. An absolutely positioned list
+   inside one gets clipped by it and stretches its scroll range, so the modal grew a second scrollbar
+   the rider had to work through before reaching the list. Fixed takes it out of that box entirely.
+   Left, top and width are written by the script from the button position. */
+.picker-list { position: fixed; z-index: 60;
+  max-height: 220px; overflow-y: auto; background: var(--field); border: 1px solid var(--line);
+  border-radius: 0 0 10px 10px; padding: 4px; box-shadow: 0 8px 24px var(--shadow);
+  /* The scrollbar takes its space from the padding, so the rows keep the width of the field. */
+  scrollbar-gutter: stable;
+  /* Once the list hits its top or bottom the browser hands the wheel to whatever is behind it and
+     the page moves instead. contain keeps the wheel inside the list. */
+  overscroll-behavior: contain; }
+
+/* Opened upwards the joined edge is the bottom one. */
+.picker-list.up { border-radius: 10px 10px 0 0; }
+
+.picker-list button { display: block; width: 100%; text-align: left; background: none; border: 0;
+  border-radius: 6px; padding: 7px 8px; font-size: 13px; color: var(--label); }
+
+.picker-list button:hover { background: var(--line); color: var(--text); }
+
+.picker-list button[aria-selected="true"] { color: var(--accent); }
+
+.led-row > select, .led-row > input[type=color] {
+  flex: 0 0 auto; width: 100%; height: 32px; box-sizing: border-box;
 }
-input:disabled, select:disabled, button:disabled { opacity: .45; cursor: not-allowed; }
-label { color: var(--label); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-.head-right { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.head-tools { display: flex; align-items: center; gap: 8px; }
-.langs { display: flex; gap: 4px; }
-.langs button { flex: 0 0 auto; padding: 4px 7px; font-family: var(--mono); font-size: 11px;
-  font-weight: 700; letter-spacing: .06em; background: transparent; color: var(--muted);
-  border-radius: 6px; }
-.langs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.theme-btn { flex: 0 0 auto; width: 28px; height: 24px; padding: 0; line-height: 1;
-  background: transparent; border-color: var(--line); color: var(--label); font-size: 14px; }
-.theme-btn:hover { color: var(--accent); }
 
-.status { font-family: var(--mono); font-size: 13px; padding: 3px 9px; border-radius: 999px;
-  background: var(--chip); color: var(--muted); border: 1px solid var(--line); }
-.status[data-state="connected"] { color: var(--accent); border-color: var(--accent); }
-.status[data-state="disconnected"], .status[data-state="no-service"], .status[data-state="no-char"] { color: var(--bad); border-color: var(--bad-line-soft); }
-.status[data-state="connecting"], .status[data-state="linking"] { color: var(--warn); border-color: var(--warn-line-soft); }
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.tile { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
-.tile b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--value); }
-.tile small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-.hint { color: var(--muted); font-size: 12px; margin: 0; }
-.hint a, .warn a { color: var(--accent); }
-.warn { color: var(--warn); font-size: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line);
-  border-radius: 8px; padding: 9px 11px; margin: 0; }
-.warn b { color: var(--warn-strong); }
-pre#log { margin: 0; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-  font-family: var(--mono); font-size: 11.5px; color: var(--muted); max-height: 220px; overflow: auto;
-  white-space: pre-wrap; word-break: break-word; overscroll-behavior: contain; }
-.log-tx { color: var(--tx); }
-.log-rx { color: var(--rx); }
-.log-ok { color: var(--good); }
-.log-err { color: var(--bad); }
-.foot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 2px; }
-.foot-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; }
-.foot a { color: var(--accent); font-size: 12px; text-decoration: none; }
-.foot a:hover { text-decoration: underline; }
-.foot .ver { color: var(--muted); font-size: 12px; white-space: nowrap; }
-code { font-family: var(--mono); font-size: 12px; background: var(--field); border: 1px solid var(--line);
-  border-radius: 5px; padding: 1px 5px; color: var(--value); word-break: break-all; }
+.led-row > select { padding: 0 10px; font-size: 13px; }
 
-/* Two settings columns share one grid, so field and button line up across rows. */
-.set-row { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: 10px; align-items: center; }
-.set-row label { grid-column: 1 / -1; }
-.set-row input, .set-row select, .set-row button { width: 100%; flex: none; }
+.led-row > input[type=color] { padding: 3px; }
 
-/* Document viewer. Only the open dialog is a flex column. */
-dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card);
-  color: var(--text); max-width: 44rem; width: calc(100% - 2rem); padding: 0; }
-dialog::backdrop { background: var(--backdrop); }
-#doc { max-height: 88vh; overflow: hidden; }
-#doc[open] { display: flex; flex-direction: column; }
-.doc-head { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 14px 16px; border-bottom: 1px solid var(--line); }
-.doc-head h3 { margin: 0; font-size: 15px; color: var(--text); }
-#doc-x, #help-x { flex: 0 0 auto; background: none; border: 0; color: var(--label); font-size: 22px;
-  line-height: 1; padding: 0 4px; }
-#doc-x:hover, #help-x:hover { color: var(--accent); }
-.doc-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain;
-  color: var(--label); font-size: 13.5px; }
-.doc-body > :first-child { margin-top: 0; }
-.doc-body h1 { font-size: 16px; color: var(--text); margin: 0 0 12px; }
-.doc-body h2 { font-size: 14px; color: var(--accent); margin: 22px 0 8px; }
-.doc-body h3, .doc-body h4 { font-size: 13.5px; color: var(--text); margin: 16px 0 6px; }
-.doc-body p { margin: 0 0 11px; }
-.doc-body ul, .doc-body ol { margin: 0 0 12px; padding-left: 18px; }
-.doc-body li { margin-bottom: 5px; }
-.doc-body b { color: var(--text); }
-.doc-body ul.nested { margin: 6px 0 2px; padding-left: 16px; }
-.doc-body ul.nested li { margin-bottom: 3px; }
-.doc-body a { color: var(--accent); }
-.doc-body code { font-family: var(--mono); font-size: .88em; background: var(--field);
-  border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
-.doc-body pre { background: var(--field); border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 12px; margin: 0 0 12px; overflow-x: auto; }
-.doc-body pre code { border: 0; background: none; padding: 0; font-size: 12px; line-height: 1.6; }
-.doc-body hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
-.doc-body blockquote { margin: 0 0 12px; padding-left: 11px; color: var(--muted);
-  border-left: 2px solid var(--line); }
-.doc-table { overflow-x: auto; margin: 0 0 12px; }
-.doc-body table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-.doc-body th, .doc-body td { border: 1px solid var(--line); padding: 7px 9px; text-align: left;
-  vertical-align: top; }
-.doc-body th { color: var(--text); background: var(--field); }
-.doc-foot { display: flex; justify-content: center; padding: 14px 16px;
-  border-top: 1px solid var(--line); }
-.doc-foot button { flex: 0 0 auto; padding: 10px 22px; }
+/* The value stays beside the slider and the slider takes everything left over, so the bar really
+   ends where the number begins. */
+.led-slider { display: flex; align-items: center; gap: 12px; }
 
-/* Shortcut links - exactly like trfm-unlock: vertical stack, URL box in --value. */
-.linkrow { display: flex; flex-direction: column; gap: 5px; }
-.linkrow .lbl { color: var(--label); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-.copy { margin: 0; font-family: var(--mono); font-size: 11.5px; background: var(--field); border: 1px solid var(--line);
-  border-radius: 8px; padding: 9px 11px; color: var(--value); white-space: pre-wrap; word-break: break-all;
-  -webkit-user-select: all; user-select: all; }
-.copy-offscreen { position: fixed; top: -1000px; opacity: 0; }
+.led-slider > input[type=range] {
+  flex: 1 1 auto; min-width: 0; margin: 0; padding: 0; height: 22px; box-sizing: border-box;
+  background: transparent; border: 0; -webkit-appearance: none; appearance: none;
+}
 
+/* The track is drawn by hand. A native range fills only up to the CENTRE of its thumb, so at the
+   maximum a thumb-width of track stays empty and the bar looks unfinished at 100 %. The gradient is
+   driven by --pct, which the script sets from the value. */
+.led-slider input[type=range]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) 0 var(--pct, 100%), var(--line) var(--pct, 100%) 100%);
+}
 
-/* Help "?" icon in a card header, opens a modal with the explanation. */
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.help-btn { flex: 0 0 auto; width: 22px; height: 22px; min-width: 22px; padding: 0; border-radius: 50%;
-  font-size: 13px; font-weight: 700; line-height: 1; background: var(--chip); border: 1px solid var(--line);
-  color: var(--muted); cursor: pointer; }
-.help-btn:hover { color: var(--accent); border-color: var(--accent); }
-#help { max-width: 520px; }
-#help #help-body { margin: 0; }
+.led-slider input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; border: 0;
+  width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--accent);
+}
 
-/* Dynamic settings list (more-card): group headers between the set-rows. */
-.set-group { margin: 8px 0 2px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--accent); font-weight: 700; }
-#settings-list .set-row { margin-bottom: 8px; }
-#confirm { max-width: 420px; }
-#confirm .doc-foot { gap: 10px; }
+.led-slider input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
 
-/* Setting row label with an inline "?" help button on the right. The generic
-   ".set-row button { width: 100% }" rule would otherwise stretch the "?" across the
-   whole row, so pin it back to a small round button here (higher specificity). */
-.set-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.set-label span { min-width: 0; flex: 1 1 auto; }
-.set-label .help-btn { flex: 0 0 auto; width: 22px; min-width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+.led-slider input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
 
-/* Speed card: the two values (open / eKFV) side by side, each label stacked over its input. */
-.speed-values { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.speed-values .sv { display: flex; flex-direction: column; gap: 6px; }
-.speed-values .sv input { width: 100%; flex: none; }
+.led-slider input[type=range]::-moz-range-thumb {
+  width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--accent);
+}
 
-/* Red warning line inside the "?" help dialog, shown only for risky settings. */
-.help-warn { color: var(--bad); font-weight: 600; margin: 10px 0 0; }
+#led-bright-val { flex: 0 0 auto; width: 3.4rem; text-align: right;
+  color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
-/* Red reason line under a gated / disabled control. */
-.danger { color: var(--bad); background: var(--bad-bg); border: 1px solid var(--bad); border-radius: 8px;
-  padding: 9px 11px; font-weight: 700; margin: 0; font-size: 12px; }
+.switch { position: relative; flex: 0 0 auto; width: 44px; height: 26px; }
 
-/* Collapsible sections (details/summary), matching lb-tool-web/vmax-unlock. */
-details.card { gap: 0; }
-details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
-  justify-content: space-between; gap: 8px; }
-details.card > summary::-webkit-details-marker { display: none; }
-details.card > summary h2 { flex: 1 1 auto; }
-details.card > summary .chev { flex: 0 0 auto; color: var(--muted); font-size: 12px; transition: transform .15s ease; }
-details.card[open] > summary .chev { transform: rotate(90deg); }
-details.card[open] > summary { margin-bottom: 12px; }
-details.card > .sect-body { display: flex; flex-direction: column; gap: 12px; }
+.switch > input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0;
+  opacity: 0; cursor: pointer; z-index: 1; }
 
-/* Log options (public / diagnostic toggles). */
-.log-opts { display: flex; flex-direction: column; gap: 4px; }
-.log-opt { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 5px; margin: 0; }
-.log-opt span { color: var(--label); font-size: 12px; }
-.log-opt .help-btn { margin: 0 5px; }
-.log-opt input[type="checkbox"] { -webkit-appearance: checkbox; appearance: auto; width: 16px; height: 16px;
-  margin: 0; padding: 0; border: 0; border-radius: 0; background: none; }
+.switch > span { position: absolute; inset: 0; border-radius: 999px; background: var(--line);
+  transition: background .15s; pointer-events: none; }
+
+.switch > span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+  border-radius: 50%; background: var(--text); transition: transform .15s; }
+
+.switch > input:checked + span { background: var(--accent); }
+
+.switch > input:checked + span::after { transform: translateX(18px); background: var(--on-accent); }
 
 /* Permanently gated (disabled) write control - greyed, not clickable. */
 .is-blocked, button.is-blocked { opacity: .55 !important; cursor: not-allowed !important; }
@@ -224,7 +1166,16 @@ details.card > .sect-body { display: flex; flex-direction: column; gap: 12px; }
 /* Read-only settings / advanced rows: label left, value right. */
 .ro-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline;
   padding: 6px 0; border-bottom: 1px solid var(--line); }
+
 .ro-row:last-child { border-bottom: 0; }
+
 .ro-lbl { color: var(--label); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+
 .ro-val { font-family: var(--mono); font-size: 13px; color: var(--value); text-align: right; word-break: break-word; }
+
 #settings-body:empty, #advanced-body:empty { display: none; }
+
+/* --- canonical additions: cover classes present in markup but not previously styled --- */
+.err { color: var(--bad); font-size: 12px; margin: 4px 0 0; }
+.foot-copy { color: var(--accent); font-size: 12px; text-decoration: none; }
+.foot-copy:hover { text-decoration: underline; }

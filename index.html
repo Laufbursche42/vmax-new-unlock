@@ -2,22 +2,16 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<!-- frame-ancestors has no effect in a meta element, only as an HTTP header. GitHub Pages sends no
-     custom headers, so it is left out here. -->
-<!-- Offline-first, everything 'self'. Bluetooth runs over Web Bluetooth, not over connect-src, so no
-     external host is allowed. The former firmware-cloud fetch (the only off-device flow) has been removed. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title data-t="pageTitle">Laufbursche VMAX new Tool</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="stylesheet" href="styles.css?v=30">
+<link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
 <div class="wrap">
-
-  <!-- (a) header ---------------------------------------------------------- -->
   <header>
     <h1>Laufbursche <span data-t="brandSub"></span></h1>
     <div class="head-right">
@@ -32,7 +26,8 @@
     </div>
   </header>
 
-  <!-- (c) intro / start --------------------------------------------------- -->
+  <p class="hint infobox" data-t="infoBannerHtml"></p>
+
   <div class="card">
     <h2 data-t="s1Title"></h2>
     <p class="hint" data-t="sub"></p>
@@ -40,7 +35,6 @@
     <p class="hint" data-t="ownDevice"></p>
   </div>
 
-  <!-- (d) connection (no PIN / credential - GPST needs none) --------------- -->
   <div class="card">
     <h2 data-t="s2Title"></h2>
     <div class="set-row">
@@ -48,28 +42,26 @@
       <select id="model-in"></select>
     </div>
     <p class="hint" data-t="modelHint"></p>
+    <div class="log-opt">
+      <span data-t="showallLabel"></span>
+      <input type="checkbox" id="showall">
+    </div>
     <div class="btns">
-      <button class="primary span2" id="btn-conn"></button>
+      <button class="primary span2" id="btn-conn" data-act="connect"></button>
     </div>
     <p class="hint" id="devinfo"></p>
     <p class="hint" data-t="controlsHint"></p>
   </div>
 
-  <!-- (e) live telemetry tiles -------------------------------------------- -->
-  <div class="card">
+  <div class="card" id="live-card" hidden>
     <h2 data-t="liveTitle"></h2>
     <div class="grid">
       <div class="tile"><b id="t-speed">-</b><small data-t="tileSpeed"></small></div>
-      <div class="tile"><b id="t-batt">-</b><small data-t="tileBatt"></small></div>
-      <div class="tile"><b id="t-volt">-</b><small data-t="tileVolt"></small></div>
-      <div class="tile"><b id="t-cur">-</b><small data-t="tileCur"></small></div>
-      <div class="tile"><b id="t-power">-</b><small data-t="tilePower"></small></div>
-      <div class="tile"><b id="t-battemp">-</b><small data-t="tileBattTemp"></small></div>
+      <div class="tile"><b id="t-motorpower">-</b><small data-t="tileMotorPower"></small></div>
+      <div class="tile"><b id="t-range">-</b><small data-t="tileRange"></small></div>
       <div class="tile"><b id="t-speedlimit">-</b><small data-t="tileSpeedLimit"></small></div>
       <div class="tile"><b id="t-wheel">-</b><small data-t="tileWheel"></small></div>
       <div class="tile"><b id="t-motor">-</b><small data-t="tileMotor"></small></div>
-      <div class="tile"><b id="t-soh">-</b><small data-t="tileSoh"></small></div>
-      <div class="tile"><b id="t-cells">-</b><small data-t="tileCells"></small></div>
       <div class="tile"><b id="t-trip">-</b><small data-t="tileTrip"></small></div>
       <div class="tile"><b id="t-triptime">-</b><small data-t="tileTripTime"></small></div>
       <div class="tile"><b id="t-total">-</b><small data-t="tileTotal"></small></div>
@@ -82,41 +74,24 @@
     <div class="btns"><button type="button" class="span2" id="btn-readall" data-t="btnReadAll" disabled></button></div>
   </div>
 
-  <!-- (f) settings (read out + write) ------------------------------------- -->
-  <details class="card" id="sect-settings">
-    <summary><h2 data-t="setTitle"></h2><span class="chev">&#9654;</span></summary>
-    <div class="sect-body">
-      <div id="settings-body"></div>
-      <p class="hint" id="settings-empty" data-t="setEmpty"></p>
-      <hr class="sep">
-      <div class="set-group" data-t="setWriteGroup"></div>
-      <p class="hint" data-t="setWriteHint"></p>
-      <div id="settings-write-body"></div>
-      <p class="warn" data-t="setWriteWarn"></p>
+  <div class="card" id="batt-card" hidden>
+    <div class="card-head"><h2 data-t="battTitle"></h2><button type="button" class="help-btn" data-help="batt" aria-label="Info">?</button></div>
+    <div class="grid">
+      <div class="tile"><b id="t-batt">-</b><small data-t="tileBatt"></small></div>
+      <div class="tile"><b id="t-volt">-</b><small data-t="tileVolt"></small></div>
+      <div class="tile"><b id="t-cur">-</b><small data-t="tileCur"></small></div>
+      <div class="tile"><b id="t-power">-</b><small data-t="tilePower"></small></div>
+      <div class="tile"><b id="t-battemp">-</b><small data-t="tileBattTemp"></small></div>
+      <div class="tile"><b id="t-soh">-</b><small data-t="tileSoh"></small></div>
+      <div class="tile"><b id="t-cells">-</b><small data-t="tileCells"></small></div>
     </div>
-  </details>
+    <p class="hint" data-t="battHint"></p>
+  </div>
 
-  <!-- (g) advanced settings (raw, read-only / gated) ---------------------- -->
-  <details class="card" id="sect-advanced">
-    <summary><h2 data-t="advTitle"></h2><span class="chev">&#9654;</span></summary>
-    <div class="sect-body">
-      <div id="advanced-body"></div>
-      <p class="hint" id="advanced-empty" data-t="advEmpty"></p>
-      <hr class="sep">
-      <div class="card-head"><h2 data-t="charsTitle"></h2></div>
-      <p class="hint" data-t="charsHint"></p>
-      <pre id="chars"></pre>
-      <div class="btns"><button type="button" id="btn-readtune" data-t="btnReadTune" disabled></button></div>
-      <hr class="sep">
-      <div class="card-head"><h2 data-t="advExpTitle"></h2></div>
-      <p class="warn" data-t="canExpNote"></p>
-      <div class="btns"><button type="button" class="span2" id="btn-canprobe" data-t="btnCanProbe" disabled></button></div>
-    </div>
-  </details>
+  <div class="card" id="more-card" hidden>
+    <div class="card-head"><h2 data-t="setTitle"></h2><button type="button" class="help-btn" data-help="limiter" aria-label="Info">?</button></div>
 
-  <!-- (h) lock / unlock (speed limiter, MotorTuning -> DA1A160D) ----------- -->
-  <div class="card" id="limiter-card">
-    <div class="card-head"><h2 data-t="limiterTitle"></h2><button type="button" class="help-btn" data-help="limiter" aria-label="Info">?</button></div>
+    <h3 class="set-group" data-t="setgrpSpeed"></h3>
     <p class="hint" data-t="limiterIntro"></p>
     <div class="btns">
       <button class="primary is-blocked" id="btn-open" disabled></button>
@@ -130,35 +105,56 @@
     </div>
     <p class="warn" data-t="limiterWarn"></p>
     <p class="hint" data-t="limiterHint"></p>
+
+    <hr class="sep">
+    <h3 class="set-group" data-t="setgrpGeneral"></h3>
+    <div id="settings-body"></div>
+    <p class="hint" id="settings-empty" data-t="setEmpty"></p>
+    <hr class="sep">
+    <div class="set-group" data-t="setWriteGroup"></div>
+    <p class="hint" data-t="setWriteHint"></p>
+    <div id="settings-write-body"></div>
+    <p class="warn" data-t="setWriteWarn"></p>
   </div>
 
-  <!-- (i) log ------------------------------------------------------------- -->
+  <div class="card" id="raw-card" hidden>
+    <div class="card-head"><h2 data-t="advTitle"></h2></div>
+    <div id="advanced-body"></div>
+    <p class="hint" id="advanced-empty" data-t="advEmpty"></p>
+    <hr class="sep">
+    <div class="card-head"><h2 data-t="charsTitle"></h2></div>
+    <p class="hint" data-t="charsHint"></p>
+    <pre id="chars"></pre>
+    <div class="btns"><button type="button" id="btn-readtune" data-t="btnReadTune" disabled></button></div>
+    <hr class="sep">
+    <div class="card-head"><h2 data-t="advExpTitle"></h2></div>
+    <p class="warn" data-t="canExpNote"></p>
+    <div class="btns"><button type="button" class="span2" id="btn-canprobe" data-t="btnCanProbe" disabled></button></div>
+  </div>
+
   <div class="card">
-    <h2 data-t="logTitle"></h2>
+    <h2 data-t="s6Title"></h2>
     <div class="log-opts">
       <div class="log-opt">
         <span data-t="publicLogLabel"></span>
         <input type="checkbox" id="public-log" checked>
-        <button type="button" class="help-btn" data-help="publiclog" aria-label="?">?</button>
+        <button type="button" class="help-btn" data-help="publiclog" aria-label="Info">?</button>
       </div>
       <div class="log-opt">
         <span data-t="diagLogLabel"></span>
         <input type="checkbox" id="diag-log">
-        <button type="button" class="help-btn" data-help="diaglog" aria-label="?">?</button>
+        <button type="button" class="help-btn" data-help="diaglog" aria-label="Info">?</button>
       </div>
     </div>
     <div class="btns">
       <button type="button" id="btn-copy-log" data-t="btnCopyLog"></button>
       <button type="button" id="btn-clear-log" data-t="btnClearLog"></button>
       <button type="button" id="btn-save-log" class="span2" data-t="btnSaveLog"></button>
-      <button type="button" id="btn-diag" class="span2" data-t="btnDiag"></button>
     </div>
-    <p class="hint" data-t="diagHint"></p>
     <pre id="log"></pre>
     <p class="hint"><span class="log-tx" data-t="logTxLegend"></span>, <span class="log-rx" data-t="logRxLegend"></span></p>
   </div>
 
-  <!-- (j) footer ---------------------------------------------------------- -->
   <footer class="foot">
     <span class="foot-links">
       <a id="link-guide" href="GUIDE.de.md" data-doc="GUIDE" data-t="footGuide"></a>
@@ -169,7 +165,7 @@
       <a id="link-privacy" href="PRIVACY.de.md" data-doc="PRIVACY" data-t="footPrivacy"></a>
       <a id="link-trademarks" href="TRADEMARKS.de.md" data-doc="TRADEMARKS" data-t="footTrademarks"></a>
     </span>
-    <span class="ver" id="build-ver"></span>
+    <span class="foot-links"><span class="ver" id="build-ver"></span><a href="https://github.com/Laufbursche42/Laufbursche42/issues" target="_blank" rel="noopener" data-t="footIssue"></a></span>
     <a class="foot-copy" href="https://laufbursche42.github.io/Laufbursche42/" target="_blank" rel="noopener">Copyright (c) 2026 Laufbursche</a>
   </footer>
 </div>
@@ -196,7 +192,6 @@
   </div>
 </dialog>
 
-<!-- confirm dialog shown before every write (MotorTuning and SetSetting) -->
 <dialog id="confirm" aria-labelledby="confirm-title">
   <div class="doc-head">
     <h3 id="confirm-title" data-t="riskyTitle"></h3>
@@ -209,7 +204,7 @@
   </div>
 </dialog>
 
-<script src="i18n.js?v=30"></script>
-<script src="app.js?v=30"></script>
+<script src="i18n.js?v=31"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

@@ -8,6 +8,8 @@ command is reconstructed from the vendor app, which never sends it itself, and n
 confirmed it accepts a written value. The tool sends the documented writes on request; whether a real
 controller acts on them is unconfirmed (hardware test pending). Reading is proven-safe and always works.
 
+> **Important for error reports:** switch on the **Diagnostic log** at the bottom of the page *before* you connect to the scooter. Only then is the full connection handshake captured - and those are exactly the lines we need in a [ticket](https://github.com/Laufbursche42/Laufbursche42/issues) to reproduce a problem.
+
 ## What you need
 
 - A newer VMAX scooter from the VMAX E-Scooter app (VX2, VX4, new VX4, VX8, R40 Pro, R55 Pro). These
@@ -78,3 +80,6 @@ nearby Bluetooth devices with their services.
 
 Raising the top speed would remove the limiter. The road approval lapses and use on public roads is then
 not allowed. Use the tool only on your own vehicle on private ground and at your own risk.
+
+## Contribute
+Want to find out if and how tuning works on your scooter? Test this tool on your own vehicle and open a ticket on [GitHub](https://github.com/Laufbursche42/Laufbursche42/issues) - with your model and what worked (or did not). That way we figure out together what is possible on which model.

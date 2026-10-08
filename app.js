@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v30';
+const BUILD = 'v31';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -50,7 +50,7 @@ function initLangSwitch() {
 // ---- Theme -----------------------------------------------------------------
 function applyTheme(light) {
   document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
-  const th = $('btn-theme'); if (th) { th.innerHTML = light ? '&#9790;' : '&#9728;'; th.title = light ? t('themeToDark') : t('themeToLight'); } // scan-ok: fixed character (sun/moon), not user input
+  const th = $('btn-theme'); if (th) { th.textContent = light ? '\u263E' : '\u2600'; th.title = light ? t('themeToDark') : t('themeToLight'); }
   try { localStorage.setItem('vmnu_theme', light ? 'light' : 'dark'); } catch (e) {}
 }
 function initTheme() {
@@ -70,7 +70,6 @@ let deviceId = '';         // current device id, redacted from a public log
 try { publicLog = localStorage.getItem('vmnu_publiclog') !== '0'; } catch (e) {}
 try { diagLog = localStorage.getItem('vmnu_diaglog') === '1'; } catch (e) {}
 
-function ts() { const d = new Date(); const p = (n, w) => String(n).padStart(w || 2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + p(d.getMilliseconds(), 3); }
 // Mask personal data before a log is shown or shared: the device id, MAC addresses, key/token/serial
 // assignments, and long contiguous hex runs (space-separated frame hex is left readable).
 function redact(text) {
@@ -90,7 +89,7 @@ function anonymize(s) {
   return redact(String(s).replace(/\x01[^\x01]*\x01/g, 'XX').replace(/\x01/g, ''));
 }
 function log(msg, cls) {
-  const raw = '[' + ts() + '] ' + msg;
+  const raw = '[' + new Date().toTimeString().slice(0, 8) + '] ' + msg;
   logBuffer.push({ raw: raw, cls: cls || '' });
   const el = $('log');
   if (el) { const span = document.createElement('span'); if (cls) span.className = cls; span.textContent = anonymize(raw) + '\n'; el.appendChild(span); el.scrollTop = el.scrollHeight; }
@@ -102,8 +101,14 @@ function renderLog() {
   el.scrollTop = el.scrollHeight;
 }
 function logDiagnosticHeader() {
-  log('VMAX new Tool build ' + BUILD + '  |  ' + navigator.userAgent);
-  log('Web Bluetooth: ' + (navigator.bluetooth ? 'available' : 'MISSING - use Bluefy (iOS) or Chrome/Edge'));
+  log('=== vmax-new-unlock diagnostic ===');
+  log('build: ' + BUILD);
+  log('time: ' + new Date().toISOString());
+  log('userAgent: ' + (navigator.userAgent || '?'));
+  log('platform: ' + (navigator.platform || '?'));
+  log('webBluetooth: ' + (navigator.bluetooth ? 'yes' : 'no'));
+  log('protocol self-test: ' + (FRAME_OK ? 'OK' : 'FAILED'));
+  log('================================');
 }
 function clearLog() { logBuffer.length = 0; const el = $('log'); if (el) el.textContent = ''; logDiagnosticHeader(); log(t('logCleared')); }
 function copyLog() {
@@ -135,7 +140,7 @@ function setStatus(s) {
   el.setAttribute('data-state', s);
   el.textContent = s === 'connected' ? t('stConnected') : s === 'connecting' ? t('stConnecting') : t('stDisconnected');
 }
-const TILE_IDS = ['t-speed', 't-batt', 't-volt', 't-cur', 't-power', 't-battemp', 't-speedlimit', 't-wheel',
+const TILE_IDS = ['t-speed', 't-motorpower', 't-range', 't-batt', 't-volt', 't-cur', 't-power', 't-battemp', 't-speedlimit', 't-wheel',
   't-motor', 't-soh', 't-cells', 't-trip', 't-triptime', 't-total', 't-maxnow', 't-maxcap', 't-idx', 't-fault'];
 function setTile(id, val) { const el = $(id); if (el) el.textContent = (val == null ? '-' : val); }
 function resetTiles() { TILE_IDS.forEach(id => setTile(id, null)); }
@@ -314,6 +319,33 @@ function timeSyncFrame() {
   return new Uint8Array([(d.getFullYear() - 2000) & 0xFF, (d.getMonth() + 1) & 0xFF, d.getDate() & 0xFF, d.getHours() & 0xFF, d.getMinutes() & 0xFF, d.getSeconds() & 0xFF]);
 }
 
+// ---- Load-time protocol self-test (mirrors inokim FRAME_OK) ----------------
+// The write builders must reproduce the documented SDK frames and the AES control codec must round-trip.
+// A real relationship, not a tautology. The expected bytes are the documented SDK frames, never guessed:
+//  - motorTuningFrame = GPSTProtocolHandler::WriteMotorTuning (0x9e310, loop 0x9e3fc-0x9e524): byte 0 =
+//    profile index, then one byte per ordinal ascending, 0xFF for gaps/leading-unset, ending at the
+//    highest set ordinal, no checksum. MaxSpeed (ord 4) alone -> [idx,FF,FF,FF,FF,v]; SpeedCut (3) +
+//    MaxSpeed (4) -> [idx,FF,FF,FF,sc,ms] (see the WriteMotorTuning note above).
+//  - settingFrame = GPSTProtocolHandler::SetSetting (0x9d2ac): message [prefix][keycode][code] on DA1A1A03.
+//    LightStatus = Auto is keycode 0x07, value code 3, prefix 0x60 -> [0x60,0x07,0x03] (SettingType table
+//    above).
+//  - genCmdEncry/aesEcbDec = the AES-128-ECB control codec with the fixed key; encrypt then decrypt must
+//    return [opcode, ...payload] (byte-verified against Node crypto, see the AES note above).
+const FRAME_OK = (function () {
+  const eq = (a, b) => a.length === b.length && Array.prototype.every.call(a, (v, i) => (v & 0xff) === (b[i] & 0xff));
+  // KNOWN-VECTOR: MotorTuning write frames (value 30 = 0x1E, SpeedCut 50 = 0x32).
+  const kvMax = eq(motorTuningFrame(0, [{ type: MT.MaxSpeed, value: 30 }]), [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x1E]);
+  const kvSc = eq(motorTuningFrame(0, [{ type: MT.SpeedCut, value: 50 }, { type: MT.MaxSpeed, value: 30 }]), [0x00, 0xFF, 0xFF, 0xFF, 0x32, 0x1E]);
+  // KNOWN-VECTOR: SetSetting LightStatus = Auto.
+  const kvSet = eq(settingFrame(0x60, 0x07, 3), [0x60, 0x07, 0x03]);
+  // ROUND-TRIP: AES control codec, encrypt then decrypt returns the original [opcode, ...payload].
+  const nonce = new Uint8Array([0x11, 0x22, 0x33, 0x44]);
+  const back = pkcs7unpad(aesEcbDec(AES_FIXED_KEY, genCmdEncry(0x01, nonce)));
+  const rt = eq(back, [0x01, 0x11, 0x22, 0x33, 0x44]);
+  return kvMax && kvSc && kvSet && rt;
+})();
+if (!FRAME_OK) { try { console.error('vmax-new-unlock: protocol self-test FAILED (frame builder mismatch)'); } catch (e) {} }
+
 // ---- Decoders (byte layout reconstructed from the ReadCharacteristic* parsers) -------------------
 // Integers are big-endian except the DA1A1514 error list (little-endian). Sentinels mark "invalid".
 // Values with an unproven physical scale are kept raw and labelled raw - no divisor is invented.
@@ -339,6 +371,8 @@ const DECODERS = {
   '1505': b => {                                             // GPST_SENSORS, live ride data (BikePerformance)
     const mp = sig16(u16be(b, 0)), hp = sig16(u16be(b, 2)), tq = sig16(u16be(b, 4)), spd = sig16(u16be(b, 6)), cad = sig16(u16be(b, 8)), rng = sig16(u16be(b, 10));
     setTile('t-speed', spd);
+    setTile('t-motorpower', mp);    // BikePerformance motorPower, offset 0 (engine-scale raw)
+    setTile('t-range', rng);        // BikePerformance range, offset 10 (engine-scale raw)
     log('  1505 sensors: speed=' + sh(spd) + ' (raw), motorPower=' + sh(mp) + ' W, humanPower=' + sh(hp) + ' W, torque=' + sh(tq) + ', cadence=' + sh(cad) + ' rpm, range=' + sh(rng) + ' km', 'log-ok');
   },
   '1501': b => {                                             // GPST_INFO, static config incl. speed limit
@@ -365,7 +399,7 @@ const DECODERS = {
   '1509': b => {                                             // GPST_BATTERY_CHG, live battery state
     const cur = inv16(u16be(b, 0)), tmp = tsig(b, 2), soc = inv8(u8at(b, 4)), volt = inv16(u16be(b, 5)),
       chg = inv16(u16be(b, 7)), pw = sig16(u16be(b, 9)), rem = inv16(u16be(b, 11));
-    snap.battRem = rem;
+    snap.battRem = rem; snap.battChg = chg;
     setTile('t-batt', soc != null ? soc + ' %' : null);
     setTile('t-volt', volt != null ? volt + ' mV' : null);
     setTile('t-cur', cur);
@@ -388,6 +422,7 @@ const DECODERS = {
   },
   '1506': b => {                                             // GPST_TRIP, trip / odometer
     const len = u32be(b, 0), tm = u32be(b, 4), odo = u32be(b, 8), odt = u32be(b, 12);
+    snap.odoTime = odt;
     setTile('t-trip', len); setTile('t-triptime', tm != null ? tm + ' s' : null); setTile('t-total', odo);
     log('  1506 trip: length(raw)=' + sh(len) + ', time=' + sh(tm) + ' s, odometer(raw)=' + sh(odo) + ', odometerTime=' + sh(odt) + ' s', 'log-ok');
   },
@@ -723,6 +758,8 @@ function updateLimiterButtons() {
 // present on this device. MotorTuning controls key off DA1A160D, setting controls off DA1A1A03. If the
 // characteristic is absent they stay disabled with the .is-blocked style (honest: nothing to write to).
 function setLimiterEnabled(on) {
+  // canonical hidden-until-connect: telemetry/settings cards show on connect, hide on disconnect/load
+  ['live-card', 'batt-card', 'more-card', 'raw-card'].forEach(id => { const el = $(id); if (el) el.hidden = !on; });
   const canTune = on && WRITE_ENABLED && !!tuneWriteChar;
   ['btn-open', 'btn-legal', 'open-in', 'legal-in', 'idx-in', 'speedcut-in'].forEach(id => { const el = $(id); if (el) { el.disabled = !canTune; el.classList.toggle('is-blocked', !canTune); } });
   const canSet = on && WRITE_ENABLED && !!settingWriteChar;
@@ -795,23 +832,38 @@ function renderAdvanced() {
     snap.battCap != null ? 'cap ' + snap.battCap + ' (raw)' : null,
     snap.battFullChg != null ? 'full ' + snap.battFullChg + ' (raw)' : null,
     snap.battMfgDate ? 'mfg ' + snap.battMfgDate : null])));
+  // 1509 live battery raw fields the BMS spec row does not carry (chargeCurrent, remCapacity)
+  body.appendChild(roRow('lblAdvBattLive', joinParts([
+    snap.battChg != null ? 'chgCurrent ' + snap.battChg : null,
+    snap.battRem != null ? 'remCapacity ' + snap.battRem : null])));
   const motorLive = joinParts([
     snap.mCur != null ? 'I ' + snap.mCur : null,
     snap.mVolt != null ? 'U ' + snap.mVolt : null,
     snap.mRpm != null ? snap.mRpm + ' rpm' : null,
+    snap.mTorque != null ? 'torque ' + snap.mTorque : null,
     snap.mTemp != null ? 'temp ' + snap.mTemp : null]);
   body.appendChild(roRow('lblAdvMotorLive', motorLive === null ? null : motorLive + ' (raw)'));
+  // 1503 motor-info fields parsed but not surfaced elsewhere (config, assist-factor range)
+  body.appendChild(roRow('lblAdvMotorCfg', joinParts([
+    snap.motorCfg != null ? 'config ' + snap.motorCfg : null,
+    (snap.assistFacMin != null || snap.assistFacMax != null) ? 'assistFactor ' + sh(snap.assistFacMin) + '..' + sh(snap.assistFacMax) : null])));
   body.appendChild(roRow('lblAdvStatus', joinParts([
     snap.stLight != null ? 'light ' + snap.stLight : null,
+    snap.stScoop != null ? 'scoopMode ' + snap.stScoop : null,
     snap.stCharge != null ? 'charge ' + snap.stCharge : null,
     snap.stAssist != null ? 'assist ' + snap.stAssist : null,
+    (snap.stFront != null || snap.stRear != null) ? 'gear ' + sh(snap.stFront) + '/' + sh(snap.stRear) : null,
+    snap.stPower != null ? 'power ' + snap.stPower : null,
+    snap.stBrake != null ? 'brakeLight ' + snap.stBrake : null,
     snap.stCtrlTemp != null ? 'ctrlTemp ' + snap.stCtrlTemp + ' (raw)' : null])));
   body.appendChild(roRow('lblAdvStats', joinParts([
     snap.stMax != null ? 'max ' + snap.stMax + ' (raw)' : null,
     snap.stAvg != null ? 'avg ' + snap.stAvg + ' (raw)' : null,
-    snap.stMaxCad != null ? 'maxCad ' + snap.stMaxCad : null])));
+    snap.stMaxCad != null ? 'maxCad ' + snap.stMaxCad : null,
+    snap.stAvgCad != null ? 'avgCad ' + snap.stAvgCad : null])));
   body.appendChild(roRow('lblAdvTotal', joinParts([
     snap.totTime != null ? snap.totTime + ' s' : null,
+    snap.odoTime != null ? 'odoTime ' + snap.odoTime + ' s' : null,
     snap.totMax != null ? 'max ' + snap.totMax + ' (raw)' : null,
     snap.totAvg != null ? 'avg ' + snap.totAvg + ' (raw)' : null])));
   body.appendChild(roRow('lblAdvFirmware', snap.firmware || null));
@@ -834,6 +886,7 @@ function confirmDialog(bodyText) {
   });
 }
 const HELP = {
+  batt: ['help_batt_t', 'help_batt_b'],
   limiter: ['limiterTitle', 'limiterHelp'],
   disclaimer: ['footDisclaimer', 'disclaimerText'],
   publiclog: ['publicLogTitle', 'publicLogHelpHtml'],
@@ -891,19 +944,6 @@ function renderMd(md) {
     .replace(/\x00B(\d+)\x00/g, (m, i) => blocks[+i]);
 }
 
-// ---- Diagnostics scan ------------------------------------------------------
-async function scanAllDevicesDiagnostic() {
-  if (!navigator.bluetooth) { log('Web Bluetooth not available', 'log-err'); return; }
-  try {
-    const d = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: OPTIONAL_SERVICES });
-    log('scan pick: ' + (d.name || '(no name)') + '  id=' + d.id);
-    const s = await d.gatt.connect();
-    const svcs = await s.getPrimaryServices();
-    for (const svc of svcs) { log('  svc ' + svc.uuid); }
-    d.gatt.disconnect();
-  } catch (e) { log('scan failed: ' + e, 'log-err'); }
-}
-
 // ---- Init ------------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   buildModelDropdown();
@@ -928,7 +968,6 @@ window.addEventListener('DOMContentLoaded', () => {
   { const b = $('btn-copy-log'); if (b) b.addEventListener('click', copyLog); }
   { const b = $('btn-clear-log'); if (b) b.addEventListener('click', clearLog); }
   { const b = $('btn-save-log'); if (b) b.addEventListener('click', saveLog); }
-  { const b = $('btn-diag'); if (b) b.addEventListener('click', scanAllDevicesDiagnostic); }
 
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });

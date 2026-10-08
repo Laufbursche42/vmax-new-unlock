@@ -9,6 +9,8 @@ nie selbst gesendet, und kein Controller hat je bestätigt, dass er einen geschr
 Tool sendet die dokumentierten Schreibbefehle auf Anforderung; ob ein echter Controller darauf reagiert,
 ist unbestätigt (Hardware-Test steht aus). Auslesen ist bewiesen sicher und funktioniert immer.
 
+> **Wichtig für Fehler-Reports:** Schalte unten auf der Seite den **Diagnose-Log** ein, *bevor* du dich mit dem Scooter verbindest. Nur dann wird der komplette Verbindungsaufbau mitgeschnitten - und genau diese Zeilen brauchen wir in einem [Ticket](https://github.com/Laufbursche42/Laufbursche42/issues), um ein Problem nachzuvollziehen.
+
 ## Was du brauchst
 
 - Einen neueren VMAX-E-Scooter aus der App VMAX E-Scooter (VX2, VX4, new VX4, VX8, R40 Pro, R55 Pro).
@@ -84,3 +86,6 @@ in der Nähe mit ihren Diensten.
 Das Anheben der Höchstgeschwindigkeit würde die Drossel aufheben. Die ABE erlischt und der Betrieb auf
 öffentlichen Wegen ist dann nicht erlaubt. Nutze das Werkzeug nur am eigenen Fahrzeug auf privatem
 Gelände und auf eigenes Risiko.
+
+## Mithelfen
+Willst du herausfinden, ob und wie Tuning bei deinem Scooter geht? Teste dieses Tool an deinem eigenen Fahrzeug und öffne ein Ticket auf [GitHub](https://github.com/Laufbursche42/Laufbursche42/issues) - mit deinem Modell und was funktioniert hat (oder nicht). So finden wir gemeinsam heraus, was bei welchem Modell möglich ist.
