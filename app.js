@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v38';
+const BUILD = 'v39';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -895,7 +895,7 @@ function openHelp(key) {
   const h = HELP[key]; if (!h) return;
   $('help-title').textContent = t(h[0]);
   const body = $('help-body'); const s = t(h[1]);
-  body.innerHTML = renderMd(s); // scan-ok: own translation table, renderMd escapes first
+  body.innerHTML = mdToHtml(s); // scan-ok: own translation table, mdToHtml escapes first
   const w = $('help-warn'); if (w) w.hidden = true;
   const dlg = $('help'); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
 }
@@ -911,60 +911,78 @@ function docTitleFor(url) { const k = { README: 'footReadme', GUIDE: 'footGuide'
 async function openDoc(file, title) {
   const dlg = $('doc'); $('doc-title').textContent = title; $('doc-body').textContent = t('docLoading');
   if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
-  try { const r = await fetch(file); const md = await r.text(); $('doc-body').innerHTML = renderMd(md); $('doc-body').scrollTop = 0; } // scan-ok: markdown of our own documents, renderMd escapes first
+  try { const r = await fetch(file); const md = await r.text(); $('doc-body').innerHTML = mdToHtml(md); $('doc-body').scrollTop = 0; } // scan-ok: markdown of our own documents, mdToHtml escapes first
   catch (e) { $('doc-body').textContent = t('docLoadErr') + file + ' (' + e + ')'; }
 }
-function renderMd(md) {
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const blocks = [];
-  const stashed = md.replace(/```[^\n]*\n([\s\S]*?)```/g, (m, code) => {
-    blocks.push('<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
-    return '\x00B' + (blocks.length - 1) + '\x00';
+// Shared helpers for mdToHtml (module-level so the recursive blockquote call sees them).
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// inlineMd receives ALREADY-escaped text (mdToHtml escapes first); .md hrefs stay in-modal via data-doclink.
+function inlineMd(s) {
+  return s
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, text, href) {
+      if (/^(https?:)?\/\//i.test(href) || /^mailto:/i.test(href)) return '<a href="' + href + '" target="_blank" rel="noopener">' + text + '</a>';
+      if (/^#/.test(href)) return '<a href="#" data-anchor="' + href + '">' + text + '</a>';
+      if (/\.md(?:[?#].*)?$/i.test(href)) return '<a href="#" data-doclink="' + href + '">' + text + '</a>';
+      return '<a href="' + href + '" target="_blank" rel="noopener">' + text + '</a>';
+    });
+}
+function mdToHtml(md) {
+  var codeBlocks = [];
+  // 1) pull fenced code blocks out first so their content is never treated as markdown
+  md = String(md).replace(/```[^\n]*\n?([\s\S]*?)```/g, function (m, code) {
+    var i = codeBlocks.length;
+    codeBlocks.push('<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
+    return '\x00CB' + i + '\x00';
   });
-  function inline(s) {
-    return s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url) => {
-        if (/^(https?:)?\/\//i.test(url) || /^mailto:/i.test(url)) return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
-        if (/^#/.test(url)) return '<a href="#" data-anchor="' + url + '">' + text + '</a>';
-        if (/\.md(?:[?#].*)?$/i.test(url)) return '<a href="#" data-doclink="' + url + '">' + text + '</a>';
-        return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
-      });
-  }
-  const lines = esc(stashed).split('\n');
-  const out = [];
-  let i = 0, listType = null, listBuf = [], paraBuf = [], quoteBuf = [];
-  const flushPara = () => { if (paraBuf.length) { out.push('<p>' + inline(paraBuf.join(' ')) + '</p>'); paraBuf = []; } };
-  const flushList = () => { if (listBuf.length) { out.push('<' + listType + '>' + listBuf.map(x => '<li>' + inline(x) + '</li>').join('') + '</' + listType + '>'); listBuf = []; listType = null; } };
-  const flushQuote = () => { if (quoteBuf.length) { out.push('<blockquote>' + inline(quoteBuf.join(' ')) + '</blockquote>'); quoteBuf = []; } };
-  const flushAll = () => { flushPara(); flushList(); flushQuote(); };
-  while (i < lines.length) {
-    const L = lines[i];
-    if (!L.trim()) { flushAll(); i++; continue; }
-    const h = L.match(/^(#{1,6})\s+(.*)$/);
-    if (h) { flushAll(); const lvl = Math.min(h[1].length + 1, 6); out.push('<h' + lvl + '>' + inline(h[2]) + '</h' + lvl + '>'); i++; continue; }
-    const ul = L.match(/^[\-\*]\s+(.*)$/);
-    const ol = L.match(/^(\d+)\.\s+(.*)$/);
-    if (ul || ol) {
-      flushPara(); flushQuote();
-      const want = ul ? 'ul' : 'ol';
-      if (listType && listType !== want) flushList();
-      listType = want;
-      let item = (ul ? ul[1] : ol[2]);
-      while (i + 1 < lines.length && lines[i + 1] && !/^\s*$/.test(lines[i + 1]) && !/^#{1,6}\s/.test(lines[i + 1]) && !/^[\-\*]\s/.test(lines[i + 1]) && !/^\d+\.\s/.test(lines[i + 1]) && !/^&gt;/.test(lines[i + 1])) {
-        i++; item += ' ' + lines[i].trim();
+  var lines = md.split(/\r?\n/);
+  var out = [], para = [], list = null;
+  function flushPara() { if (para.length) { out.push('<p>' + inlineMd(esc(para.join(' '))) + '</p>'); para = []; } }
+  function flushList() { if (list) { out.push('<' + list.type + '>' + list.items.join('') + '</' + list.type + '>'); list = null; } }
+  function isTableSep(s) { var tt = s.replace(/\s/g, ''); return /^\|?:?-+:?(\|:?-+:?)+\|?$/.test(tt); }
+  function splitRow(s) { return s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); }
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var cb = ln.match(/^\x00CB(\d+)\x00$/);
+    if (cb) { flushPara(); flushList(); out.push(codeBlocks[Number(cb[1])]); continue; }
+    if (/^\s*$/.test(ln)) { flushPara(); flushList(); continue; }
+    var h = ln.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flushPara(); flushList(); var lvl = Math.min(h[1].length, 4); out.push('<h' + lvl + '>' + inlineMd(esc(h[2])) + '</h' + lvl + '>'); continue; }
+    if (/^---+$/.test(ln.trim())) { flushPara(); flushList(); out.push('<hr>'); continue; }
+    if (ln.indexOf('|') >= 0 && i + 1 < lines.length && isTableSep(lines[i + 1])) {   // GFM table: header, |---| sep, rows
+      flushPara(); flushList();
+      var head = splitRow(ln); i++;   // consume the separator row
+      var body = '';
+      while (i + 1 < lines.length && lines[i + 1].indexOf('|') >= 0 && lines[i + 1].trim() !== '') {
+        body += '<tr>' + splitRow(lines[++i]).map(function (c) { return '<td>' + inlineMd(esc(c)) + '</td>'; }).join('') + '</tr>';
       }
-      listBuf.push(item);
-      i++; continue;
+      out.push('<table><thead><tr>' + head.map(function (c) { return '<th>' + inlineMd(esc(c)) + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table>');
+      continue;
     }
-    const q = L.match(/^&gt;\s?(.*)$/);
-    if (q) { flushPara(); flushList(); quoteBuf.push(q[1]); i++; continue; }
-    flushList(); flushQuote();
-    paraBuf.push(L);
-    i++;
+    if (/^\s*>/.test(ln)) {                             // merge consecutive > lines into ONE callout
+      flushPara(); flushList();
+      var q = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, '')); i++; }
+      i--;                                              // step back; the for-loop re-increments
+      while (q.length && /^\s*$/.test(q[0])) q.shift();
+      while (q.length && /^\s*$/.test(q[q.length - 1])) q.pop();
+      if (q.length) out.push('<blockquote>' + mdToHtml(q.join('\n')) + '</blockquote>');  // inner rendered as markdown
+      continue;
+    }
+    var ul = ln.match(/^\s*[-*]\s+(.*)$/);
+    var ol = ln.match(/^\s*\d+\.\s+(.*)$/);
+    if (ul || ol) {
+      flushPara();
+      var type = ul ? 'ul' : 'ol';
+      if (!list || list.type !== type) { flushList(); list = { type: type, items: [] }; }
+      list.items.push('<li>' + inlineMd(esc((ul ? ul[1] : ol[1]))) + '</li>');
+      continue;
+    }
+    para.push(ln.trim());
   }
-  flushAll();
-  return out.join('\n').replace(/\x00B(\d+)\x00/g, (m, k) => blocks[+k]);
+  flushPara(); flushList();
+  return out.join('\n');
 }
 
 // ---- Init ------------------------------------------------------------------
