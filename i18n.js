@@ -13,6 +13,7 @@ window.I18N = {
     themeToDark: "Auf dunkle Darstellung umschalten",
 
     s1Title: "So fängst du an",
+    startHintGuide: 'Neu hier? In der <a href="GUIDE.de.md" data-doc="GUIDE" data-t="footGuide">Anleitung</a> steht jeder Schritt.',
     sub: "Live über Web Bluetooth mit einem neueren VMAX-E-Scooter reden, also den Modellen der App VMAX E-Scooter (VX2, VX4, VX8, R40, R55). Diese Seite ist für das iPhone gedacht (App Bluefy), läuft aber auch in Chrome oder Edge auf Android und Desktop. Alles bleibt lokal auf deinem Gerät, es werden keine Daten an einen Server gesendet.",
     expWarn: "Machbarkeitsstudie: Diese Seite zeigt, was das Bluetooth-Protokoll eines VMAX-E-Scooters technisch möglich macht. Sie ist kein fertiges Produkt. Es gibt keine Gewährleistung. Alles was du hier tust, tust du auf eigenes Risiko. <a href=\"#\" data-open-disclaimer>Haftungsausschluss lesen</a>.",
     ownDevice: "Nur am eigenen Fahrzeug auf privatem Gelände. Das Anheben der Höchstgeschwindigkeit würde die Drossel aufheben, die ABE erlischt und der Betrieb auf öffentlichen Wegen ist dann nicht erlaubt.",
@@ -213,6 +214,7 @@ window.I18N = {
     themeToDark: "Switch to dark theme",
 
     s1Title: "How to start",
+    startHintGuide: 'New here? The <a href="GUIDE.en.md" data-doc="GUIDE" data-t="footGuide">guide</a> walks through every step.',
     sub: "Talk live over Web Bluetooth to a newer VMAX scooter, meaning the models of the VMAX E-Scooter app (VX2, VX4, VX8, R40, R55). This page targets the iPhone (Bluefy app) but also runs in Chrome or Edge on Android and desktop. Everything stays local on your device; no data is sent to any server.",
     expWarn: "Feasibility study: this page shows what the Bluetooth protocol of a VMAX scooter makes possible. It is not a finished product. There is no warranty. Whatever you do here, you do at your own risk. <a href=\"#\" data-open-disclaimer>Read the disclaimer</a>.",
     ownDevice: "Only on your own vehicle on private ground. Raising the top speed would remove the limiter, the road approval lapses and use on public roads is then not allowed.",
