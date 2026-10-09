@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v36';
+const BUILD = 'v37';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -978,8 +978,9 @@ window.addEventListener('DOMContentLoaded', () => {
   logDiagnosticHeader();
   setLimiterEnabled(false);   // grey the write controls from the start
 
-  { const pc = $('public-log'); if (pc) { pc.checked = publicLog; pc.addEventListener('change', () => { publicLog = pc.checked; try { localStorage.setItem('vmnu_publiclog', publicLog ? '1' : '0'); } catch (e) {} renderLog(); }); } }
-  { const dc = $('diag-log'); if (dc) { dc.checked = diagLog; dc.addEventListener('change', () => { diagLog = dc.checked; try { localStorage.setItem('vmnu_diaglog', diagLog ? '1' : '0'); } catch (e) {} }); } }
+  { const pc = $('public-log'); if (pc) { pc.checked = publicLog; pc.addEventListener('change', () => { publicLog = pc.checked; try { localStorage.setItem('vmnu_publiclog', publicLog ? '1' : '0'); } catch (e) {} log('public-log: ' + (publicLog ? 'on (anonymizing device name/id)' : 'off')); renderLog(); }); } }
+  { const dc = $('diag-log'); if (dc) { dc.checked = diagLog; dc.addEventListener('change', () => { diagLog = dc.checked; try { localStorage.setItem('vmnu_diaglog', diagLog ? '1' : '0'); } catch (e) {} log('diag-log: ' + (diagLog ? 'on' : 'off')); }); } }
+  { const sa = $('showall'); if (sa) sa.addEventListener('change', () => { log('show-all-devices: ' + (sa.checked ? 'on' : 'off')); }); }
 
   $('btn-conn').addEventListener('click', () => { if ($('btn-conn').dataset.act === 'disconnect') disconnectBle(); else pickAndConnect(); });
   { const s = $('model-in'); if (s) s.addEventListener('change', () => buildModelDropdown()); }
