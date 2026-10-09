@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v34';
+const BUILD = 'v35';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -896,7 +896,9 @@ function openHelp(key) {
   const h = HELP[key]; if (!h) return;
   $('help-title').textContent = t(h[0]);
   const body = $('help-body'); const s = t(h[1]);
-  if (/[<&]/.test(s)) body.innerHTML = s; else body.textContent = s; // scan-ok: our own translation table
+  // Route help bodies through renderMd so markdown-style formatting (paragraphs, lists, bold, code,
+  // inline links) in the i18n table renders properly instead of a single wall of text.
+  body.innerHTML = renderMd(s); // scan-ok: own translation table, renderMd escapes untrusted input first
   const w = $('help-warn'); if (w) w.hidden = true;
   const dlg = $('help'); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
 }
@@ -922,26 +924,50 @@ function renderMd(md) {
     blocks.push('<pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
     return '\x00B' + (blocks.length - 1) + '\x00';
   });
-  const html = esc(stashed)
-    .replace(/^&gt;.*(?:\n&gt;.*)*/gm, block => '<blockquote>' + block.replace(/^&gt; ?/gm, '').replace(/\n/g, ' ') + '</blockquote>')
-    .replace(/^### (.*)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.*)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.*)$/gm, '<h2>$1</h2>')
-    .replace(/^- (.*)$/gm, '&bull; $1')
-    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url) => {
-      if (/^(https?:)?\/\//i.test(url) || /^mailto:/i.test(url)) return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
-      if (/^#/.test(url)) return '<a href="#" data-anchor="' + url + '">' + text + '</a>';
-      if (/\.md(?:[?#].*)?$/i.test(url)) return '<a href="#" data-doclink="' + url + '">' + text + '</a>';
-      return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
-    })
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    .replace(/^/, '<p>').replace(/$/, '</p>');
-  return html
-    .replace(/<p>(\x00B\d+\x00)<\/p>/g, '$1')
-    .replace(/\x00B(\d+)\x00/g, (m, i) => blocks[+i]);
+  function inline(s) {
+    return s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url) => {
+        if (/^(https?:)?\/\//i.test(url) || /^mailto:/i.test(url)) return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
+        if (/^#/.test(url)) return '<a href="#" data-anchor="' + url + '">' + text + '</a>';
+        if (/\.md(?:[?#].*)?$/i.test(url)) return '<a href="#" data-doclink="' + url + '">' + text + '</a>';
+        return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
+      });
+  }
+  const lines = esc(stashed).split('\n');
+  const out = [];
+  let i = 0, listType = null, listBuf = [], paraBuf = [], quoteBuf = [];
+  const flushPara = () => { if (paraBuf.length) { out.push('<p>' + inline(paraBuf.join(' ')) + '</p>'); paraBuf = []; } };
+  const flushList = () => { if (listBuf.length) { out.push('<' + listType + '>' + listBuf.map(x => '<li>' + inline(x) + '</li>').join('') + '</' + listType + '>'); listBuf = []; listType = null; } };
+  const flushQuote = () => { if (quoteBuf.length) { out.push('<blockquote>' + inline(quoteBuf.join(' ')) + '</blockquote>'); quoteBuf = []; } };
+  const flushAll = () => { flushPara(); flushList(); flushQuote(); };
+  while (i < lines.length) {
+    const L = lines[i];
+    if (!L.trim()) { flushAll(); i++; continue; }
+    const h = L.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flushAll(); const lvl = Math.min(h[1].length + 1, 6); out.push('<h' + lvl + '>' + inline(h[2]) + '</h' + lvl + '>'); i++; continue; }
+    const ul = L.match(/^[\-\*]\s+(.*)$/);
+    const ol = L.match(/^(\d+)\.\s+(.*)$/);
+    if (ul || ol) {
+      flushPara(); flushQuote();
+      const want = ul ? 'ul' : 'ol';
+      if (listType && listType !== want) flushList();
+      listType = want;
+      let item = (ul ? ul[1] : ol[2]);
+      while (i + 1 < lines.length && lines[i + 1] && !/^\s*$/.test(lines[i + 1]) && !/^#{1,6}\s/.test(lines[i + 1]) && !/^[\-\*]\s/.test(lines[i + 1]) && !/^\d+\.\s/.test(lines[i + 1]) && !/^&gt;/.test(lines[i + 1])) {
+        i++; item += ' ' + lines[i].trim();
+      }
+      listBuf.push(item);
+      i++; continue;
+    }
+    const q = L.match(/^&gt;\s?(.*)$/);
+    if (q) { flushPara(); flushList(); quoteBuf.push(q[1]); i++; continue; }
+    flushList(); flushQuote();
+    paraBuf.push(L);
+    i++;
+  }
+  flushAll();
+  return out.join('\n').replace(/\x00B(\d+)\x00/g, (m, k) => blocks[+k]);
 }
 
 // ---- Init ------------------------------------------------------------------
