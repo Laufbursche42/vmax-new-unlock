@@ -199,7 +199,6 @@ window.I18N = {
     confirmLegalBody: "Das setzt MaxSpeed auf den legalen Wert zurück. Die Wirkung an echter Hardware ist unbestätigt.",
 
     limiterHelp: "MaxSpeed ist Typ 4 im MotorTuning des GPST-Protokolls, SpeedCut ist Typ 3. Der Befehl schreibt ein Byte je Tuning-Typ nach Merkmal DA1A160D, nicht gesetzte Typen bleiben 0xFF. Der Befehl wird gesendet; weil die Hersteller-App ihn aber nie selbst sendet und kein Controller die Annahme bestätigt hat, ist seine Wirkung an echter Hardware unbestätigt.",
-    disclaimerText: "**Machbarkeitsstudie, kein fertiges Produkt.** Es gibt keine Gewährleistung und keine Garantie für fehlerfreien Betrieb.\n\n**Was das Werkzeug tut:** Es sendet die dokumentierten Schreibbefehle (Komfort-Einstellungen und die MotorTuning-Drossel). Die Hersteller-App schreibt die Drossel aber nie selbst und kein Controller nimmt sie nachweislich an, daher ist die Wirkung an echter Hardware unbestätigt. Auslesen funktioniert.\n\n**Herkunft der Frames:** Die GPST-Protokoll-Frames wurden aus der nativen Bibliothek der Hersteller-App rekonstruiert.\n\n**Rechtlicher Hinweis:** Das Anheben der Geschwindigkeit würde die Drossel aufheben - die ABE erlischt und der Betrieb auf öffentlichen Wegen ist dann nicht erlaubt. Nutzung ausschließlich am eigenen Fahrzeug und auf eigenes Risiko.\n\n**Datenschutz:** Der Bluetooth-Teil spricht nur lokal mit dem Gerät, dabei gehen keine Daten an einen Server.\n\n**Marken:** VMAX ist eine Marke des jeweiligen Inhabers. Dieses Projekt ist unabhängig und nicht mit VMAX verbunden.",
 
     stDisconnected: "getrennt",
     stConnecting: "verbinde",
@@ -400,7 +399,6 @@ window.I18N = {
     confirmLegalBody: "This sets MaxSpeed back to the legal value. Its effect on real hardware is unconfirmed.",
 
     limiterHelp: "MaxSpeed is type 4 in the GPST protocol's MotorTuning, SpeedCut is type 3. The command writes one byte per tuning type to characteristic DA1A160D, unset types stay 0xFF. The command is sent; but because the vendor app never sends it itself and no controller has confirmed it accepts it, its effect on real hardware is unconfirmed.",
-    disclaimerText: "**Feasibility study, not a finished product.** There is no warranty and no guarantee of error-free operation.\n\n**What the tool does:** It sends the documented write commands (comfort settings and the MotorTuning limiter). The vendor app never writes the limiter itself, though, and no controller is proven to accept it, so the effect on real hardware is unconfirmed. Reading works.\n\n**Frame origin:** The GPST protocol frames were reconstructed from the vendor app's native library.\n\n**Legal:** Raising the speed would remove the limiter - the type approval becomes void and riding on public roads is then not allowed. Use it only on your own vehicle and at your own risk.\n\n**Privacy:** The Bluetooth part talks to the device locally only, no data is sent to any server.\n\n**Trademarks:** VMAX is a trademark of its respective owner. This project is independent and not affiliated with VMAX.",
 
     stDisconnected: "disconnected",
     stConnecting: "connecting",

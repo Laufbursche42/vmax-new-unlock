@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v37';
+const BUILD = 'v38';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -888,7 +888,6 @@ function confirmDialog(bodyText) {
 const HELP = {
   batt: ['help_batt_t', 'help_batt_b'],
   limiter: ['limiterTitle', 'limiterHelp'],
-  disclaimer: ['footDisclaimer', 'disclaimerText'],
   publiclog: ['publicLogTitle', 'publicLogHelpHtml'],
   diaglog: ['diagLogTitle', 'diagLogHelpHtml'],
 };
@@ -908,7 +907,7 @@ function docFile(name) {
   return lang === 'de' ? name + '.de.md' : name + '.md';
 }
 function docBaseName(url) { return url.replace(/[?#].*$/, '').replace(/\.(de|en)\.md$/i, '').replace(/\.md$/i, ''); }
-function docTitleFor(url) { const k = { README: 'footReadme', GUIDE: 'footGuide', LICENSE: 'footLicense', PRIVACY: 'footPrivacy', TRADEMARKS: 'footTrademarks' }[docBaseName(url)]; return k ? t(k) : docBaseName(url); }
+function docTitleFor(url) { const k = { README: 'footReadme', GUIDE: 'footGuide', LICENSE: 'footLicense', PRIVACY: 'footPrivacy', TRADEMARKS: 'footTrademarks', DISCLAIMER: 'footDisclaimer' }[docBaseName(url)]; return k ? t(k) : docBaseName(url); }
 async function openDoc(file, title) {
   const dlg = $('doc'); $('doc-title').textContent = title; $('doc-body').textContent = t('docLoading');
   if (!dlg.open) { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); }
@@ -997,7 +996,6 @@ window.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.help-btn').forEach(btn => btn.addEventListener('click', () => openHelp(btn.getAttribute('data-help'))));
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });
   ['doc-x', 'doc-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', () => { const d = $('doc'); if (d && d.close) d.close(); }); });
-  { const b = $('link-disclaimer'); if (b) b.addEventListener('click', e => { e.preventDefault(); openHelp('disclaimer'); }); }
   // Delegate on document so links injected later by applyLang() (e.g. startHintGuide) also open the dialog.
   document.addEventListener('click', e => {
     const a = e.target.closest && e.target.closest('[data-doc]');
@@ -1009,12 +1007,10 @@ window.addEventListener('DOMContentLoaded', () => {
   { const db = $('doc-body'); if (db) db.addEventListener('click', e => {
       const dl = e.target.closest && e.target.closest('[data-doclink]');
       if (dl) { e.preventDefault(); const href = dl.getAttribute('data-doclink'); openDoc(href, docTitleFor(href)); return; }
-      const an = e.target.closest && e.target.closest('[data-anchor]');
-      if (an) { e.preventDefault(); if (an.getAttribute('data-anchor').toLowerCase().indexOf('disclaimer') >= 0) openHelp('disclaimer'); }
     }); }
   document.addEventListener('click', e => {
     const dd = e.target.closest && e.target.closest('[data-open-disclaimer]');
-    if (dd) { e.preventDefault(); openHelp('disclaimer'); }
+    if (dd) { e.preventDefault(); openDoc(docFile('DISCLAIMER'), t('footDisclaimer')); }
   });
 
   // Firmware fetch: scan a BLE log for 8-byte printable mid candidates, then query the Hylink API.
