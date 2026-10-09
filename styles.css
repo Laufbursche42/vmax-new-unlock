@@ -1145,21 +1145,23 @@ input:disabled, select:disabled, button:disabled, .btn:disabled { opacity: .45; 
 
 /* shared doc-modal styling (fleet-wide) */
 /* Shared doc-modal styling (DISCLAIMER / LICENSE / PRIVACY / TRADEMARKS) across the whole fleet.
-   Uses the normalized CSS variables every unlock/update/FW page defines: --fg --muted --card --line --accent --warn --warnbg. */
-.doc-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain; color: var(--fg); font-size: 13.5px; }
+   Uses fallback chains so it works whether the repo defines --fg/--warnbg (lb-webpatcher style)
+   or --text/--warn-bg (lb-tool-web style) in :root. */
+.doc-body { padding: 14px 16px; overflow-y: auto; overscroll-behavior: contain;
+  color: var(--fg, var(--text, inherit)); font-size: 13.5px; }
 .doc-body > :first-child { margin-top: 0; }
-.doc-body h1 { font-size: 16px; color: var(--fg); margin: 0 0 12px; }
+.doc-body h1 { font-size: 16px; color: var(--fg, var(--text, inherit)); margin: 0 0 12px; }
 .doc-body h2 { font-size: 14px; color: var(--accent); margin: 22px 0 8px; }
-.doc-body h3, .doc-body h4 { font-size: 13.5px; color: var(--fg); margin: 16px 0 6px; }
+.doc-body h3, .doc-body h4 { font-size: 13.5px; color: var(--fg, var(--text, inherit)); margin: 16px 0 6px; }
 .doc-body p { margin: 0 0 11px; }
 .doc-body ul, .doc-body ol { margin: 0 0 12px; padding-left: 18px; list-style: disc; }
 .doc-body ol { list-style: decimal; }
 .doc-body li { margin-bottom: 5px; display: list-item; }
-.doc-body b, .doc-body strong { color: var(--fg); font-weight: 600; }
+.doc-body b, .doc-body strong { color: var(--fg, var(--text, inherit)); font-weight: 600; }
 .doc-body a { color: var(--accent); }
 .doc-body code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .88em;
-  background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
-.doc-body pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card, var(--field, transparent)); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+.doc-body pre { background: var(--card, var(--field, transparent)); border: 1px solid var(--line); border-radius: 8px;
   padding: 10px 12px; margin: 0 0 12px; overflow-x: auto; }
 .doc-body pre code { border: 0; background: none; padding: 0; font-size: 12px; line-height: 1.6; }
 .doc-body hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
@@ -1167,10 +1169,11 @@ input:disabled, select:disabled, button:disabled, .btn:disabled { opacity: .45; 
   font-size: 12.5px; margin: 12px 0; }
 .doc-body th, .doc-body td { border: 1px solid var(--line); padding: 7px 9px; text-align: left;
   vertical-align: top; }
-.doc-body th { color: var(--fg); background: var(--card); }
+.doc-body th { color: var(--fg, var(--text, inherit)); background: var(--card, var(--field, transparent)); }
 /* blockquotes render as a colored warn callout - used for ABE / Straftat / Verletzungsgefahr highlights */
 .doc-body blockquote { margin: 0 0 12px; padding: 10px 12px; color: var(--warn);
-  background: var(--warnbg); border: 1px solid var(--warn); border-left: 3px solid var(--warn);
+  background: var(--warnbg, var(--warn-bg, transparent));
+  border: 1px solid var(--warn); border-left: 3px solid var(--warn);
   border-radius: 8px; }
 .doc-body blockquote b, .doc-body blockquote strong { color: var(--warn); }
 .doc-body blockquote > :first-child { margin-top: 0; }
