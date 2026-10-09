@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v35';
+const BUILD = 'v36';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -896,9 +896,7 @@ function openHelp(key) {
   const h = HELP[key]; if (!h) return;
   $('help-title').textContent = t(h[0]);
   const body = $('help-body'); const s = t(h[1]);
-  // Route help bodies through renderMd so markdown-style formatting (paragraphs, lists, bold, code,
-  // inline links) in the i18n table renders properly instead of a single wall of text.
-  body.innerHTML = renderMd(s); // scan-ok: own translation table, renderMd escapes untrusted input first
+  body.innerHTML = renderMd(s); // scan-ok: own translation table, renderMd escapes first
   const w = $('help-warn'); if (w) w.hidden = true;
   const dlg = $('help'); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
 }
