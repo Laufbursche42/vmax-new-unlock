@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v31';
+const BUILD = 'v32';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -986,4 +986,137 @@ window.addEventListener('DOMContentLoaded', () => {
     const dd = e.target.closest && e.target.closest('[data-open-disclaimer]');
     if (dd) { e.preventDefault(); openHelp('disclaimer'); }
   });
+
+  // Firmware fetch: scan a BLE log for 8-byte printable mid candidates, then query the Hylink API.
+  (function initFwFetch() {
+    const fileEl = $('fwfetch-file'), statusEl = $('fwfetch-filestatus'), candRow = $('fwfetch-candidates'),
+          candSel = $('fwfetch-cand'), midEl = $('fwfetch-mid'), goBtn = $('fwfetch-go'), resEl = $('fwfetch-result');
+    if (!fileEl || !midEl || !goBtn) return;
+
+    const tx = (typeof t === 'function') ? t : (k => k);
+    function enableGo() { goBtn.disabled = !(midEl.value && /^[\x20-\x7e]{4,32}$/.test(midEl.value.trim())); }
+
+    function scanCandidates(bytes) {
+      const out = new Set(), MIN = 6, MAX = 16;
+      let run = 0, start = 0;
+      for (let i = 0; i < bytes.length; i++) {
+        const c = bytes[i];
+        if (c >= 0x20 && c <= 0x7e) {
+          if (run === 0) start = i;
+          run++;
+        } else {
+          if (run >= MIN) {
+            const s = new TextDecoder('latin1').decode(bytes.subarray(start, start + run));
+            for (let k = 0; k + 8 <= s.length; k++) {
+              const w = s.slice(k, k + 8);
+              if (/^[A-Za-z0-9_\-]{8}$/.test(w)) out.add(w);
+            }
+            if (s.length <= MAX && s.length >= MIN && /^[A-Za-z0-9_\-]+$/.test(s)) out.add(s);
+          }
+          run = 0;
+        }
+      }
+      if (run >= MIN) {
+        const s = new TextDecoder('latin1').decode(bytes.subarray(start, start + run));
+        for (let k = 0; k + 8 <= s.length; k++) {
+          const w = s.slice(k, k + 8);
+          if (/^[A-Za-z0-9_\-]{8}$/.test(w)) out.add(w);
+        }
+      }
+      return Array.from(out).sort();
+    }
+
+    function detectFormat(bytes) {
+      const magic = new TextDecoder('latin1').decode(bytes.subarray(0, 8));
+      if (magic.startsWith('btsnoop')) return 'Android btsnoop';
+      if (bytes[0] === 0xA1 && bytes[1] === 0xB2 && bytes[2] === 0xC3 && bytes[3] === 0xD4) return 'pcap';
+      if (bytes[0] === 0x0A && bytes[1] === 0x0D && bytes[2] === 0x0D && bytes[3] === 0x0A) return 'pcapng';
+      return 'binary / text';
+    }
+
+    fileEl.addEventListener('change', async () => {
+      resEl.textContent = ''; candRow.hidden = true; while (candSel.firstChild) candSel.removeChild(candSel.firstChild);
+      const f = fileEl.files && fileEl.files[0];
+      if (!f) { statusEl.textContent = ''; return; }
+      statusEl.textContent = tx('fwfetchScanning') + ' (' + f.name + ', ' + Math.round(f.size / 1024) + ' KB)';
+      try {
+        const buf = await f.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const fmt = detectFormat(bytes);
+        const cands = scanCandidates(bytes);
+        statusEl.textContent = tx('fwfetchFound').replace('{fmt}', fmt).replace('{n}', String(cands.length));
+        if (cands.length) {
+          candRow.hidden = false;
+          const first = document.createElement('option');
+          first.value = ''; first.textContent = '-- ' + tx('fwfetchPickCand') + ' --';
+          candSel.appendChild(first);
+          for (const c of cands) {
+            const o = document.createElement('option'); o.value = c; o.textContent = c; candSel.appendChild(o);
+          }
+          candSel.addEventListener('change', () => { if (candSel.value) { midEl.value = candSel.value; enableGo(); } });
+        }
+      } catch (err) {
+        statusEl.textContent = tx('fwfetchReadFailed') + ' (' + (err && err.message || err) + ')';
+      }
+    });
+
+    midEl.addEventListener('input', enableGo);
+
+    function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+    function addDiv(parent, text, cls) {
+      const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = text; parent.appendChild(d); return d;
+    }
+    function addFileLine(parent, type, url) {
+      const d = document.createElement('div'); d.textContent = '  ' + type + ': ';
+      const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = url;
+      d.appendChild(a); parent.appendChild(d);
+    }
+    function addNotice(parent) {
+      // The notice intentionally carries an issue-tracker link; built via DOM so the API-returned URLs stay safe.
+      const d = document.createElement('div'); d.className = 'fwfetch-notice';
+      const html = tx('fwfetchSendToUsHtml');
+      const m = html.match(/^(.*?)<a href="([^"]+)" target="_blank" rel="noopener">([^<]+)<\/a>(.*)$/);
+      if (m) {
+        d.appendChild(document.createTextNode(m[1]));
+        const a = document.createElement('a'); a.href = m[2]; a.target = '_blank'; a.rel = 'noopener'; a.textContent = m[3];
+        d.appendChild(a); d.appendChild(document.createTextNode(m[4]));
+      } else { d.textContent = html; }
+      parent.appendChild(d);
+    }
+
+    goBtn.addEventListener('click', async () => {
+      const mid = (midEl.value || '').trim();
+      if (!mid) return;
+      clear(resEl); resEl.textContent = tx('fwfetchQuerying') + ' mid=' + mid + ' ...';
+      try {
+        const r = await fetch('https://hra2-api.hylink.io/firmware?mid=' + encodeURIComponent(mid),
+          { method: 'GET', headers: { 'Accept': 'application/json', 'X-API-Version': '2.8.1' } });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const result = (j && (j.result || j)) || [];
+        clear(resEl);
+        if (!result.length) { resEl.textContent = tx('fwfetchEmpty') + ' (mid=' + mid + ')'; return; }
+        addDiv(resEl, tx('fwfetchFoundHeader').replace('{n}', String(result.length)));
+        for (const fw of result) {
+          addDiv(resEl, (fw.fw_ver || fw.id || '?') + (fw.release_note ? ' - ' + fw.release_note : ''));
+          try {
+            const fr = await fetch('https://hra2-api.hylink.io/firmware/' + encodeURIComponent(fw.id) + '/files',
+              { method: 'GET', headers: { 'Accept': 'application/json', 'X-API-Version': '2.8.1' } });
+            if (fr.ok) {
+              const fl = await fr.json();
+              const files = (fl && (fl.result || fl)) || [];
+              for (const file of files) {
+                const url = file.url || file.href || '';
+                const type = file.type || 'bin';
+                if (url) addFileLine(resEl, type, url);
+              }
+            }
+          } catch (e2) { addDiv(resEl, '  ' + tx('fwfetchFilesFailed')); }
+        }
+        addNotice(resEl);
+      } catch (err) {
+        resEl.textContent = tx('fwfetchQueryFailed') + ' (' + (err && err.message || err) + ')';
+      }
+    });
+  })();
 });

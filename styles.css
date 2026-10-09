@@ -1179,3 +1179,17 @@ input:disabled, select:disabled, button:disabled, .btn:disabled { opacity: .45; 
 .err { color: var(--bad); font-size: 12px; margin: 4px 0 0; }
 .foot-copy { color: var(--accent); font-size: 12px; text-decoration: none; }
 .foot-copy:hover { text-decoration: underline; }
+
+/* Firmware-Beschaffung (BLE-Log-Upload + Hylink-API-Query) */
+#fwfetch-card .fwfetch-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0; }
+#fwfetch-card .fwfetch-upload { display: flex; align-items: center; gap: 8px; }
+#fwfetch-card input[type="file"] { font: inherit; color: var(--muted); max-width: 100%; }
+#fwfetch-card label { color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+#fwfetch-card select, #fwfetch-card input[type="text"] {
+  background: var(--field); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 9px; font: inherit; font-size: 13px; min-width: 180px;
+}
+#fwfetch-card #fwfetch-go { padding: 6px 14px; }
+#fwfetch-card .fwfetch-result { white-space: pre-wrap; margin-top: 10px; }
+#fwfetch-card .fwfetch-result a { color: var(--accent); word-break: break-all; }
+#fwfetch-card .fwfetch-result .fwfetch-notice { color: var(--text); margin-top: 8px; display: block; }

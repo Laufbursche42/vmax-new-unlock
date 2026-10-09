@@ -17,6 +17,26 @@ line (Bluetooth name `hw_`/`zyd_`, *VMAX connect* app) use the sister tool
 
 **Open the web app: [laufbursche42.github.io/vmax-new-unlock](https://laufbursche42.github.io/vmax-new-unlock/)**
 
+## Firmware fetch (help us close the last gap)
+
+The write command is reconstructed from the vendor app but **the controller rejects raised speed-register
+writes on VX2 and VX4** (field-tested). The only remaining tuning path is a firmware patch, and for that
+we need the actual firmware image - which we currently do not have, because Hylink's firmware API wants a
+device-specific `mid` from the controller's CAN bus and the module id lives only on the scooter itself.
+
+The tool now has a **Firmware fetch** card that helps us close this gap:
+
+1. On your own scooter, capture a BLE log while the VMAX/Hyena app runs the firmware-check workflow
+   (Android: Developer Options -> Bluetooth HCI snoop log -> bugreport; iOS: Apple bluetooth.mobileconfig
+   -> sysdiagnose -> `.pklg`). The guide inside the tool (`?` button on the Firmware-fetch card) walks
+   through every click.
+2. Upload the log to the card. It is scanned client-side (never leaves your browser) and prints the
+   printable 8-char candidates it finds; pick the one that matches your controller.
+3. The card queries `https://hra2-api.hylink.io/firmware?mid=<mid>` (open, no login) and lists the
+   download URLs for your firmware.
+4. **Please download the firmware files and open a GitHub Issue so we can analyse them and maybe build
+   a tune for your model.** The firmware is per-device-id, so every owner can contribute their own.
+
 **Guide: [Deutsch](GUIDE.de.md) | [English](GUIDE.en.md)** covers every step, from the first connect to
 reading out all values.
 

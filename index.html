@@ -2,13 +2,13 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://hra2-api.hylink.io; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title data-t="pageTitle">Laufbursche VMAX new Tool</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png">
-<link rel="stylesheet" href="styles.css?v=31">
+<link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
 <div class="wrap">
@@ -132,6 +132,33 @@
     <div class="btns"><button type="button" class="span2" id="btn-canprobe" data-t="btnCanProbe" disabled></button></div>
   </div>
 
+  <div class="card" id="fwfetch-card">
+    <div class="card-head">
+      <h2 data-t="fwfetchTitle"></h2>
+      <button type="button" class="help-btn" data-help="fwfetch" aria-label="Info">?</button>
+    </div>
+    <p class="hint" data-t="fwfetchIntro"></p>
+    <div class="fwfetch-row">
+      <label class="fwfetch-upload">
+        <span data-t="fwfetchUploadLabel"></span>
+        <input type="file" id="fwfetch-file" accept=".log,.pklg,.pcap,.pcapng,.bin,.txt" />
+      </label>
+      <div class="fwfetch-status hint" id="fwfetch-filestatus" aria-live="polite"></div>
+    </div>
+    <div class="fwfetch-row" id="fwfetch-candidates" hidden>
+      <label><span data-t="fwfetchCandLabel"></span></label>
+      <select id="fwfetch-cand"></select>
+    </div>
+    <div class="fwfetch-row">
+      <label>
+        <span data-t="fwfetchMidLabel"></span>
+        <input type="text" id="fwfetch-mid" maxlength="32" spellcheck="false" autocomplete="off" placeholder="K5266_K2041" />
+      </label>
+      <button type="button" id="fwfetch-go" data-t="fwfetchGo" disabled></button>
+    </div>
+    <div class="fwfetch-result hint" id="fwfetch-result" aria-live="polite"></div>
+  </div>
+
   <div class="card">
     <h2 data-t="s6Title"></h2>
     <div class="log-opts">
@@ -204,7 +231,7 @@
   </div>
 </dialog>
 
-<script src="i18n.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="i18n.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>

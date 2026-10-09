@@ -10,6 +10,8 @@ controller acts on them is unconfirmed (hardware test pending). Reading is prove
 
 > **Important for error reports:** switch on the **Diagnostic log** at the bottom of the page *before* you connect to the scooter. Only then is the full connection handshake captured - and those are exactly the lines we need in a [ticket](https://github.com/Laufbursche42/Laufbursche42/issues) to reproduce a problem.
 
+> **Firmware is still missing:** real tuning needs the firmware file of your scooter. The controller rejects direct writes to the speed register (field-tested on VX2 and VX4), which leaves only a firmware patch. Scroll down to the **Firmware fetch** card: upload a BLE log, pick the mid, grab the download URL, send the file to Laufbursche via an issue. The `?` button on that card walks you through the capture on Android and iOS. Every VMAX owner can contribute their own firmware - that is how we build the tune piece by piece.
+
 ## What you need
 
 - A newer VMAX scooter from the VMAX E-Scooter app (VX2, VX4, new VX4, VX8, R40 Pro, R55 Pro). These

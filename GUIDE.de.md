@@ -11,6 +11,8 @@ ist unbestätigt (Hardware-Test steht aus). Auslesen ist bewiesen sicher und fun
 
 > **Wichtig für Fehler-Reports:** Schalte unten auf der Seite den **Diagnose-Log** ein, *bevor* du dich mit dem Scooter verbindest. Nur dann wird der komplette Verbindungsaufbau mitgeschnitten - und genau diese Zeilen brauchen wir in einem [Ticket](https://github.com/Laufbursche42/Laufbursche42/issues), um ein Problem nachzuvollziehen.
 
+> **Firmware fehlt noch:** Für ein echtes Tuning brauchen wir die Firmware-Datei deines Scooters. Der Controller lehnt direkte Schreibversuche auf das Speed-Register ab (VX2 und VX4 am Gerät geprüft), weshalb nur ein Firmware-Patch bleibt. Hol dir unten die Firmware-Beschaffungs-Karte: BLE-Log hochladen, mid erkennen, Download-URL abrufen, Datei an Laufbursche einreichen. Die Anleitung dafür steckt im `?`-Knopf dieser Karte. Jeder VMAX-Besitzer kann seine eigene Firmware beisteuern, so bauen wir das Tuning Stück für Stück.
+
 ## Was du brauchst
 
 - Einen neueren VMAX-E-Scooter aus der App VMAX E-Scooter (VX2, VX4, new VX4, VX8, R40 Pro, R55 Pro).
