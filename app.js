@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v33';
+const BUILD = 'v34';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -973,9 +973,14 @@ window.addEventListener('DOMContentLoaded', () => {
   ['help-x', 'help-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', closeHelp); });
   ['doc-x', 'doc-close'].forEach(id => { const b = $(id); if (b) b.addEventListener('click', () => { const d = $('doc'); if (d && d.close) d.close(); }); });
   { const b = $('link-disclaimer'); if (b) b.addEventListener('click', e => { e.preventDefault(); openHelp('disclaimer'); }); }
-  document.querySelectorAll('[data-doc]').forEach(a => a.addEventListener('click', e => {
-    e.preventDefault(); const name = a.getAttribute('data-doc'); openDoc(docFile(name), (a.textContent || name).trim());
-  }));
+  // Delegate on document so links injected later by applyLang() (e.g. startHintGuide) also open the dialog.
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('[data-doc]');
+    if (!a) return;
+    e.preventDefault();
+    const name = a.getAttribute('data-doc');
+    openDoc(docFile(name), (a.textContent || name).trim());
+  });
   { const db = $('doc-body'); if (db) db.addEventListener('click', e => {
       const dl = e.target.closest && e.target.closest('[data-doclink]');
       if (dl) { e.preventDefault(); const href = dl.getAttribute('data-doclink'); openDoc(href, docTitleFor(href)); return; }
