@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v40';
+const BUILD = 'v41';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -67,6 +67,7 @@ const logBuffer = [];      // { raw, cls }
 let publicLog = true;      // anonymize before display/copy/save (default on)
 let diagLog = false;       // capture everything raw, do not skip repeated notify frames
 let deviceId = '';         // current device id, redacted from a public log
+let deviceName = '';       // current device name, shown in the device-info line
 try { publicLog = localStorage.getItem('vmnu_publiclog') !== '0'; } catch (e) {}
 try { diagLog = localStorage.getItem('vmnu_diaglog') === '1'; } catch (e) {}
 
@@ -144,6 +145,8 @@ const TILE_IDS = ['t-speed', 't-motorpower', 't-range', 't-batt', 't-volt', 't-c
   't-motor', 't-soh', 't-cells', 't-trip', 't-triptime', 't-total', 't-maxnow', 't-maxcap', 't-idx', 't-fault'];
 function setTile(id, val) { const el = $(id); if (el) el.textContent = (val == null ? '-' : val); }
 function resetTiles() { TILE_IDS.forEach(id => setTile(id, null)); }
+// Device-info line: device name plus the controller type from 1802 once it is known (e.g. "BT638 - K5361_DE").
+function updateDevinfo() { const el = $('devinfo'); if (el) el.textContent = deviceName + (snap.controllerType ? '  -  ' + snap.controllerType : ''); }
 
 // Snapshot of the last decoded values, so the Settings and Advanced panels render read-only rows from
 // what the device actually reported. Reset on connect/disconnect.
@@ -355,6 +358,7 @@ function u32be(b, o) { return (o + 3 < b.length) ? (b[o] * 16777216 + (b[o + 1] 
 function u8at(b, o) { return o < b.length ? b[o] : null; }
 function inv16(v) { return (v == null || v === 0xFFFF) ? null : v; }
 function inv8(v) { return (v == null || v === 0xFF) ? null : v; }
+function inv32(v) { return (v == null || v === 0xFFFFFFFF) ? null : v; }   // 0xFFFFFFFF = "not available" sentinel
 function sig16(v) { if (v == null || v === 0x8000) return null; return v >= 0x8000 ? v - 0x10000 : v; }
 function sig8(v) { if (v == null || v === 0x80) return null; return v >= 0x80 ? v - 0x100 : v; }
 // Signed 16-bit temperature, both 0x8000 and 0xFFFF are "not available" sentinels.
@@ -389,7 +393,7 @@ const DECODERS = {
     log('  1503 motor: nominal=' + sh(snap.motorNom) + ' W, max=' + sh(snap.motorMax) + ' W, peak=' + sh(snap.motorPeak) + ' W, config=' + sh(snap.motorCfg), 'log-ok');
   },
   '1502': b => {                                             // GPST_BATTERY_INFO, BMS spec and health
-    snap.battCap = inv16(u16be(b, 0)); snap.battCells = u8at(b, 2); snap.battCycles = inv16(u16be(b, 3));
+    snap.battCap = inv16(u16be(b, 0)); snap.battCells = inv8(u8at(b, 2)); snap.battCycles = inv16(u16be(b, 3));
     snap.battSoH = inv8(u8at(b, 5)); snap.battFullChg = inv16(u16be(b, 6)); snap.battDesignV = inv16(u16be(b, 8));
     snap.battMfgDate = smartDate(u16be(b, 14));
     setTile('t-soh', snap.battSoH != null ? snap.battSoH + ' %' : null);
@@ -412,8 +416,8 @@ const DECODERS = {
     log('  150A motor live: current=' + sh(snap.mCur) + ', voltage=' + sh(snap.mVolt) + ', rpm=' + sh(snap.mRpm) + ', torque=' + sh(snap.mTorque) + ', temp=' + sh(snap.mTemp) + ' (all raw, engine scale)', 'log-ok');
   },
   '1508': b => {                                             // GPST_UPDATE, status (BikeUpdate)
-    const ch = u8at(b, 2); snap.stLight = u8at(b, 0); snap.stScoop = u8at(b, 1); snap.stCharge = (ch == null ? null : (ch & 0x0F));
-    snap.stAssist = u8at(b, 3); snap.stFront = u8at(b, 4); snap.stRear = u8at(b, 5); snap.stPower = u8at(b, 6); snap.stBrake = u8at(b, 7); snap.stCtrlTemp = tsig(b, 9);
+    const ch = inv8(u8at(b, 2)); snap.stLight = inv8(u8at(b, 0)); snap.stScoop = inv8(u8at(b, 1)); snap.stCharge = (ch == null ? null : (ch & 0x0F));
+    snap.stAssist = inv8(u8at(b, 3)); snap.stFront = inv8(u8at(b, 4)); snap.stRear = inv8(u8at(b, 5)); snap.stPower = inv8(u8at(b, 6)); snap.stBrake = inv8(u8at(b, 7)); snap.stCtrlTemp = tsig(b, 9);
     log('  1508 status: light=' + sh(snap.stLight) + ', scoopMode=' + sh(snap.stScoop) + ', charging=' + sh(snap.stCharge) + ', assistLevel=' + sh(snap.stAssist) + ', gear=' + sh(snap.stFront) + '/' + sh(snap.stRear) + ', power=' + sh(snap.stPower) + ', brakeLight=' + sh(snap.stBrake) + ', ctrlTemp=' + sh(snap.stCtrlTemp) + ' (raw, engine scale)', 'log-ok');
   },
   '150c': b => {                                             // GPST_BATTERY_CELL, BMS per cell
@@ -421,13 +425,13 @@ const DECODERS = {
     log('  150C BMS cell ' + sh(idx) + ': ' + sh(mv) + ' mV, temp=' + sh(tp) + ' (min ' + sh(tmin) + ', max ' + sh(tmax) + ')', 'log-ok');
   },
   '1506': b => {                                             // GPST_TRIP, trip / odometer
-    const len = u32be(b, 0), tm = u32be(b, 4), odo = u32be(b, 8), odt = u32be(b, 12);
+    const len = inv32(u32be(b, 0)), tm = inv32(u32be(b, 4)), odo = inv32(u32be(b, 8)), odt = inv32(u32be(b, 12));
     snap.odoTime = odt;
     setTile('t-trip', len); setTile('t-triptime', tm != null ? tm + ' s' : null); setTile('t-total', odo);
     log('  1506 trip: length(raw)=' + sh(len) + ', time=' + sh(tm) + ' s, odometer(raw)=' + sh(odo) + ', odometerTime=' + sh(odt) + ' s', 'log-ok');
   },
   '1507': b => {                                             // GPST_TOTAL_TRIP, lifetime
-    snap.totTime = u32be(b, 0); snap.totMax = sig16(u16be(b, 4)); snap.totAvg = sig16(u16be(b, 6));
+    snap.totTime = inv32(u32be(b, 0)); snap.totMax = sig16(u16be(b, 4)); snap.totAvg = sig16(u16be(b, 6));
     log('  1507 total: totalTime=' + sh(snap.totTime) + ' s, maxSpeed=' + sh(snap.totMax) + ' (raw), avgSpeed=' + sh(snap.totAvg) + ' (raw)', 'log-ok');
   },
   '150d': b => {                                             // GPST_STATS, session stats (fixed head only)
@@ -437,6 +441,11 @@ const DECODERS = {
   '1504': b => {                                             // GPST_FIRMWAREID (ASCII fields; layout not offset-fixed)
     snap.firmware = ascii(b).replace(/\.+/g, ' ').trim();
     log('  1504 firmwareId: "' + ascii(b) + '"', 'log-ok');
+  },
+  '1802': b => {                                             // GPST firmware-info, rotating field: id in b[1], ASCII payload from b[2]
+    const fid = u8at(b, 1), s = ascii(b.subarray(2)).replace(/\.+/g, '').trim();
+    if (s && fid === 1) { snap.controllerType = s; updateDevinfo(); }   // field 1 carries the model/controller type, e.g. K5361_DE
+    log('  1802 firmware-info field ' + sh(fid) + ': "' + s + '"', 'log-ok');
   },
   '1514': b => {                                             // GPST_ERROR, little-endian code list from offset 0
     const codes = []; for (let o = 0; o + 1 < b.length; o += 2) { const c = u16le(b, o); if (c) codes.push('0x' + c.toString(16)); }
@@ -476,7 +485,7 @@ async function pickAndConnect() {
     device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: OPTIONAL_SERVICES });
     deviceId = device.id || '';
     log('device: ' + (device.name || '(no name)') + '  id=' + device.id);
-    $('devinfo').textContent = (device.name || '(no name)');
+    deviceName = device.name || '(no name)'; updateDevinfo();
     device.addEventListener('gattserverdisconnected', onDisconnected);
     server = await device.gatt.connect();
     log('GATT connected', 'log-ok');
@@ -866,6 +875,7 @@ function renderAdvanced() {
     snap.odoTime != null ? 'odoTime ' + snap.odoTime + ' s' : null,
     snap.totMax != null ? 'max ' + snap.totMax + ' (raw)' : null,
     snap.totAvg != null ? 'avg ' + snap.totAvg + ' (raw)' : null])));
+  body.appendChild(roRow('lblAdvController', snap.controllerType || null));
   body.appendChild(roRow('lblAdvFirmware', snap.firmware || null));
   const serials = Object.keys(snap.serials).map(k => k + ': ' + snap.serials[k]).filter(x => x.split(': ')[1]);
   body.appendChild(roRow('lblAdvSerials', serials.length ? serials.join('  |  ') : null));
