@@ -11,7 +11,7 @@
 // the MotorTuning write and no controller has confirmed it accepts a written value, so its effect on a
 // real device is unconfirmed (hardware test pending). Nothing here invents a UUID, opcode, offset or scale.
 
-const BUILD = 'v41';
+const BUILD = 'v42';
 
 // Master gate for every write. Reading is never gated by this. Writes are enabled: the documented frames
 // are sent, but their effect on a real controller is unconfirmed (see the feasibility note on the page).
@@ -1050,6 +1050,17 @@ window.addEventListener('DOMContentLoaded', () => {
     const tx = (typeof t === 'function') ? t : (k => k);
     function enableGo() { goBtn.disabled = !(midEl.value && /^[\x20-\x7e]{4,32}$/.test(midEl.value.trim())); }
 
+    // A real mid is an 8-char DriverIdentify value read over the CAN exchange. Telemetry logs are full of
+    // serials, model names and firmware ids that look similar but are not mids. Drop the obvious
+    // device-telemetry tokens so the auto-suggested list is not misleading. The manual mid field is never
+    // filtered, so a genuine mid can always be entered by hand even if this heuristic would hide it.
+    function looksLikeNoise(w) {
+      return /VMAX|BIKE|SCOOT/i.test(w)              // product / firmware-id markers (VMAX_..., BIKE_0123...)
+        || /_DE\b|_EU\b|_FR\b|_AT\b|_UK\b/i.test(w)  // country-limited model suffixes (K5361_DE ...)
+        || /KM\d{4}/i.test(w)                        // serial fragments (VMAX_KM2023...)
+        || /^\d{8,}$/.test(w);                       // long pure-digit runs (odometer / serial numerals)
+    }
+
     function scanCandidates(bytes) {
       const out = new Set(), MIN = 6, MAX = 16;
       let run = 0, start = 0;
@@ -1077,7 +1088,7 @@ window.addEventListener('DOMContentLoaded', () => {
           if (/^[A-Za-z0-9_\-]{8}$/.test(w)) out.add(w);
         }
       }
-      return Array.from(out).sort();
+      return Array.from(out).filter(w => !looksLikeNoise(w)).sort();
     }
 
     function detectFormat(bytes) {
