@@ -192,6 +192,15 @@ if [ -f "$REPO_ROOT/scripts/security-scan.py" ]; then
 fi
 
 # =================================================================
+# ---------- PHASE F - author-identity (local-only; reads git config lb.expectedEmail, no email in file) ----------
+EXP_EMAIL=$(git config lb.expectedEmail 2>/dev/null || true)
+if [ -n "$EXP_EMAIL" ]; then
+  CUR_EMAIL=$(git config user.email 2>/dev/null || true)
+  if [ "$CUR_EMAIL" != "$EXP_EMAIL" ]; then
+    echo "BLOCK: commit author email '$CUR_EMAIL' != expected (set via: git config lb.expectedEmail). Fix: git config user.email <correct-noreply>"
+    RC=1
+  fi
+fi
 echo "-----------------------------------------------------------------"
 if [ "$RC" -ne 0 ]; then
   echo "pre-commit FAILED -- commit blocked. Fix the issues above (bypass a genuine false positive with: git commit --no-verify)."
