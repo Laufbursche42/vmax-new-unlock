@@ -1,12 +1,12 @@
-// Report-issue footer hook: shared across every unlock / update / FW page.
-// Hooks on the footer "Fehler melden" link (data-t="footIssue") and replaces its href
-// with a prefilled GitHub issue including brand/model/platform/build + debug-log.
+// Report-issue footer hook: shared across every unlock / update / FW page and the tools.
+// Hooks on the footer "Fehler melden" link (data-t="footIssue" / "footReport" / #link-report) and
+// replaces its href with a prefilled GitHub issue including scooter / page / build + the debug log.
 // If the log is too long for a URL, it goes to the clipboard with an instruction.
 //
 // Expected page conventions:
-//   - a <a data-t="footIssue"> link in the footer (canonical shell)
+//   - a <a data-t="footIssue"> link in the footer (canonical shell; tools use footReport / #link-report)
 //   - a #log element whose textContent is the human-visible debug log
-//   - optional: window.BUILD (string) and I18N[LANG] with keys reportHint/reportHintClip/reportHintManual
+//   - optional: window.BUILD (string) and a #build-ver element
 //   - LANG global (string "de" or "en") - fallback: document.documentElement.lang or "en"
 (function () {
   'use strict';
@@ -37,42 +37,34 @@
     var isDe = getLang() === 'de';
     var lines = [];
     if (isDe) {
-      lines.push('**Seite:** ' + pageSlug());
-      lines.push('**URL:** ' + pageUrl());
-      lines.push('**Marke / Modell:** ' + (brandSub() || '(bitte eintragen)'));
+      lines.push('**Scooter:** ' + (brandSub() || '(bitte eintragen)'));
+      lines.push('**Seite:** ' + pageSlug() + ' - ' + pageUrl());
       lines.push('**Build:** ' + (build() || '(unbekannt)'));
       lines.push('');
       lines.push('---');
       lines.push('');
-      lines.push('**Was ist passiert?**');
+      lines.push('**Dein Anliegen:**');
       lines.push('');
       lines.push('(bitte beschreiben)');
       lines.push('');
-      lines.push('**Checkliste:**');
-      lines.push('- [ ] Scooter wurde erkannt und verbunden');
-      lines.push('- [ ] Live-Anzeige zeigt plausible Werte');
-      lines.push('- [ ] Entsperrung funktioniert');
+      lines.push('**Welche App- oder Firmware-Version nutzt du? (falls bekannt)**');
       lines.push('');
     } else {
-      lines.push('**Page:** ' + pageSlug());
-      lines.push('**URL:** ' + pageUrl());
-      lines.push('**Brand / Model:** ' + (brandSub() || '(please fill in)'));
+      lines.push('**Scooter:** ' + (brandSub() || '(please fill in)'));
+      lines.push('**Page:** ' + pageSlug() + ' - ' + pageUrl());
       lines.push('**Build:** ' + (build() || '(unknown)'));
       lines.push('');
       lines.push('---');
       lines.push('');
-      lines.push('**What happened?**');
+      lines.push('**Your request:**');
       lines.push('');
       lines.push('(please describe)');
       lines.push('');
-      lines.push('**Checklist:**');
-      lines.push('- [ ] Scooter recognised and connected');
-      lines.push('- [ ] Live telemetry shows plausible values');
-      lines.push('- [ ] Unlock works');
+      lines.push('**Which app or firmware version are you on? (if known)**');
       lines.push('');
     }
     if (logEmbedded) {
-      lines.push(isDe ? '**Debug-Log (automatisch angehaengt):**' : '**Debug log (attached automatically):**');
+      lines.push(isDe ? '**Debug-Log (automatisch angehängt):**' : '**Debug log (attached automatically):**');
       lines.push('');
       lines.push(fence());
       lines.push(logText);
@@ -83,7 +75,7 @@
       lines.push(hintText);
       lines.push('');
       lines.push(fence());
-      lines.push(isDe ? '(hier einfuegen - Strg+V)' : '(paste here - Ctrl+V)');
+      lines.push(isDe ? '(hier einfügen - Strg+V)' : '(paste here - Ctrl+V)');
       lines.push(fence());
     }
     return lines.join('\n');
@@ -91,9 +83,11 @@
 
   function openIssue(bodyText) {
     var isDe = getLang() === 'de';
-    var title = '[' + pageSlug() + '] ' + (isDe ? 'Rueckmeldung' : 'Feedback');
+    var title = '[' + pageSlug() + '] ' + (isDe ? 'Rückmeldung' : 'Feedback');
     var url = ISSUES + '?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(bodyText);
-    window.open(url, '_blank', 'noopener');
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
   function copyToClipboard(txt) {
@@ -125,9 +119,9 @@
       return;
     }
     copyToClipboard(logText).then(function () {
-      openIssue(body(false, '', isDe ? '(Dein Debug-Log wurde in die Zwischenablage kopiert - unten mit Strg+V einfuegen)' : '(your debug log was copied to the clipboard - paste it below with Ctrl+V)'));
+      openIssue(body(false, '', isDe ? '(Dein Debug-Log wurde in die Zwischenablage kopiert - unten mit Strg+V einfügen)' : '(your debug log was copied to the clipboard - paste it below with Ctrl+V)'));
     }).catch(function () {
-      openIssue(body(false, '', isDe ? '(Debug-Log war zu lang fuer die URL und Zwischenablage schlug fehl - bitte das Log auf der Seite manuell kopieren mit dem Kopieren-Knopf und hier einfuegen)' : '(debug log too long for the URL and clipboard failed - please copy the log manually with the Copy button on the page and paste it here)'));
+      openIssue(body(false, '', isDe ? '(Debug-Log war zu lang für die URL und Zwischenablage schlug fehl - bitte das Log auf der Seite manuell mit dem Kopieren-Knopf kopieren und hier einfügen)' : '(debug log too long for the URL and clipboard failed - please copy the log manually with the Copy button on the page and paste it here)'));
     });
   }
 
