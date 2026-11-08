@@ -37,40 +37,40 @@
     var isDe = getLang() === 'de';
     var lines = [];
     if (isDe) {
-      lines.push('**Scooter:** ' + (brandSub() || '(bitte eintragen)'));
-      lines.push('**Seite:** ' + pageSlug() + ' - ' + pageUrl());
-      lines.push('**Build:** ' + (build() || '(unbekannt)'));
+      lines.push('Scooter: ' + (brandSub() || '(bitte eintragen)'));
+      lines.push('Seite: ' + pageSlug() + ' - ' + pageUrl());
+      lines.push('Build: ' + (build() || '(unbekannt)'));
       lines.push('');
       lines.push('---');
       lines.push('');
-      lines.push('**Dein Anliegen:**');
+      lines.push('Dein Anliegen:');
       lines.push('');
       lines.push('(bitte beschreiben)');
       lines.push('');
-      lines.push('**Welche App- oder Firmware-Version nutzt du? (falls bekannt)**');
+      lines.push('Welche App- oder Firmware-Version nutzt du? (falls bekannt)');
       lines.push('');
     } else {
-      lines.push('**Scooter:** ' + (brandSub() || '(please fill in)'));
-      lines.push('**Page:** ' + pageSlug() + ' - ' + pageUrl());
-      lines.push('**Build:** ' + (build() || '(unknown)'));
+      lines.push('Scooter: ' + (brandSub() || '(please fill in)'));
+      lines.push('Page: ' + pageSlug() + ' - ' + pageUrl());
+      lines.push('Build: ' + (build() || '(unknown)'));
       lines.push('');
       lines.push('---');
       lines.push('');
-      lines.push('**Your request:**');
+      lines.push('Your request:');
       lines.push('');
       lines.push('(please describe)');
       lines.push('');
-      lines.push('**Which app or firmware version are you on? (if known)**');
+      lines.push('Which app or firmware version are you on? (if known)');
       lines.push('');
     }
     if (logEmbedded) {
-      lines.push(isDe ? '**Debug-Log (automatisch angehängt):**' : '**Debug log (attached automatically):**');
+      lines.push(isDe ? 'Debug-Log (automatisch angehängt):' : 'Debug log (attached automatically):');
       lines.push('');
       lines.push(fence());
       lines.push(logText);
       lines.push(fence());
     } else {
-      lines.push(isDe ? '**Debug-Log:**' : '**Debug log:**');
+      lines.push(isDe ? 'Debug-Log:' : 'Debug log:');
       lines.push('');
       lines.push(hintText);
       lines.push('');
