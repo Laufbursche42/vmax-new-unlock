@@ -1178,3 +1178,6 @@ input:disabled, select:disabled, button:disabled, .btn:disabled { opacity: .45; 
 .doc-body blockquote b, .doc-body blockquote strong { color: var(--warn); }
 .doc-body blockquote > :first-child { margin-top: 0; }
 .doc-body blockquote > :last-child { margin-bottom: 0; }
+
+/* CLS-FIX-APPENDED: reserve layout so nothing grows/reflows after load (see _cls-fix recipe) */
+.sunset-box { min-height: 13.5rem; box-sizing: border-box; }
