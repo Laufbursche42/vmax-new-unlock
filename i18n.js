@@ -8,6 +8,7 @@ window.I18N = {
   de: {
     pageTitle: "Laufbursche VMAX new Tool",
     brandSub: "VMAX new Tool",
+    sunsetBannerHtml: "<b>Dieses Projekt wird nicht mehr weiterentwickelt.</b> Die Seite bleibt zum Auslesen (Live-Werte und Diagnose) erhalten.",
     infoBannerHtml: "Tuning ist mit dieser Seite nicht möglich.",
     themeToLight: "Auf helle Darstellung umschalten",
     themeToDark: "Auf dunkle Darstellung umschalten",
@@ -210,6 +211,7 @@ window.I18N = {
   en: {
     pageTitle: "Laufbursche VMAX new Tool",
     brandSub: "VMAX new Tool",
+    sunsetBannerHtml: "<b>This project is no longer maintained.</b> The page stays available for reading (live values and diagnostics).",
     infoBannerHtml: "Tuning is not possible with this page.",
     themeToLight: "Switch to light theme",
     themeToDark: "Switch to dark theme",
